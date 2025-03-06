@@ -3,7 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const { User, Roles } = require('../models/user.model');
-const auth = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
 
 // Login
 router.post('/login', [
@@ -92,7 +92,7 @@ router.post('/register', [
     }
 });
 
-// Get current user
+// Get current user profile
 router.get('/me', auth, async (req, res) => {
     try {
         const user = await User.getById(req.user.userId);
@@ -111,12 +111,12 @@ router.get('/me', auth, async (req, res) => {
             clinicId: user.clinic_id
         });
     } catch (error) {
-        console.error('Get user error:', error);
+        console.error('Get profile error:', error);
         res.status(500).json({ error: 'خطا در دریافت اطلاعات کاربر' });
     }
 });
 
-// Update current user
+// Update current user profile
 router.put('/me', auth, [
     body('email').optional().isEmail().withMessage('ایمیل نامعتبر است'),
     body('password').optional().isLength({ min: 6 }).withMessage('رمز عبور باید حداقل ۶ کاراکتر باشد'),
@@ -144,7 +144,7 @@ router.put('/me', auth, [
 
         res.json({ message: 'اطلاعات کاربر با موفقیت بروزرسانی شد' });
     } catch (error) {
-        console.error('Update user error:', error);
+        console.error('Update profile error:', error);
         res.status(500).json({ error: 'خطا در بروزرسانی اطلاعات کاربر' });
     }
 });

@@ -2,13 +2,14 @@ const express = require('express');
 const router = express.Router();
 const { body, query, validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
-const auth = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
 const isAdmin = require('../middleware/isAdmin');
 const { User, UserRoles, Roles } = require('../models/user.model');
-const db = require('../database/db');
+const { executeQuery } = require('../config/database');
 
 // Middleware to check if user is admin
-router.use(auth, isAdmin);
+router.use(auth);
+router.use(isAdmin);
 
 // Get all users with filters
 router.get('/users', [
@@ -136,21 +137,21 @@ router.delete('/users/:id', async (req, res) => {
 // Get admin dashboard stats
 router.get('/stats', async (req, res) => {
     try {
-        const [totalUsers] = await db.execute(
+        const [totalUsers] = await executeQuery(
             'SELECT COUNT(*) as count FROM users WHERE is_active = true'
         );
 
-        const [doctorsCount] = await db.execute(
+        const [doctorsCount] = await executeQuery(
             'SELECT COUNT(*) as count FROM users WHERE role = ? AND is_active = true',
             [UserRoles.DOCTOR]
         );
 
-        const [secretariesCount] = await db.execute(
+        const [secretariesCount] = await executeQuery(
             'SELECT COUNT(*) as count FROM users WHERE role = ? AND is_active = true',
             [UserRoles.SECRETARY]
         );
 
-        const [opticiansCount] = await db.execute(
+        const [opticiansCount] = await executeQuery(
             'SELECT COUNT(*) as count FROM users WHERE role = ? AND is_active = true',
             [UserRoles.OPTICIAN]
         );
@@ -170,7 +171,7 @@ router.get('/stats', async (req, res) => {
 // Get recent users
 router.get('/users/recent', async (req, res) => {
     try {
-        const [users] = await db.execute(
+        const [users] = await executeQuery(
             `SELECT id, username, full_name, role, created_at 
              FROM users 
              WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
@@ -187,7 +188,7 @@ router.get('/users/recent', async (req, res) => {
 // Get recent visits
 router.get('/visits/recent', async (req, res) => {
     try {
-        const [visits] = await db.execute(
+        const [visits] = await executeQuery(
             `SELECT v.id, v.visit_date,
                     p.first_name, p.last_name,
                     u.full_name as doctor_name

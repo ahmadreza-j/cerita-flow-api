@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { body, query, validationResult } = require('express-validator');
-const auth = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
 const { Product, ProductTypes } = require('../models/product.model');
 
 // Middleware to check if user is optician
