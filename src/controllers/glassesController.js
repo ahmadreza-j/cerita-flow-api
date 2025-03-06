@@ -1,5 +1,5 @@
 const { validationResult } = require('express-validator');
-const Glasses = require('../models/Glasses');
+const { Glasses } = require('../models/glasses.model');
 const moment = require('moment-jalaali');
 
 const createGlasses = async (req, res) => {

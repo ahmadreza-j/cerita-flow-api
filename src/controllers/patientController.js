@@ -1,5 +1,5 @@
 const { validationResult } = require('express-validator');
-const Patient = require('../models/Patient');
+const { Patient } = require('../models/patient.model');
 const moment = require('moment-jalaali');
 
 const createPatient = async (req, res) => {

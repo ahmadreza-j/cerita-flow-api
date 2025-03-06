@@ -1,5 +1,5 @@
 const { validationResult } = require('express-validator');
-const Visit = require('../models/Visit');
+const { Visit } = require('../models/visit.model');
 const moment = require('moment-jalaali');
 
 const createVisit = async (req, res) => {
@@ -87,7 +87,7 @@ const addExamination = async (req, res) => {
             return res.status(400).json({ errors: errors.array() });
         }
 
-        const examinationId = await Visit.addExamination({
+        await Visit.addExamination({
             visit_id: req.params.id,
             ...req.body
         });
