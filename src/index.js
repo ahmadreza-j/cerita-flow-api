@@ -4,7 +4,9 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
-const { testConnection } = require('./config/database');
+const fs = require('fs');
+const path = require('path');
+const { executeMasterQuery } = require('./config/database');
 
 const app = express();
 
@@ -31,20 +33,47 @@ if (process.env.NODE_ENV === 'development') {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Test database connection
-testConnection().catch(err => {
-    console.error('Failed to connect to database:', err);
+// Initialize master database
+const initializeMasterDatabase = async () => {
+    try {
+        // Read and execute master_schema.sql
+        const masterSchema = fs.readFileSync(path.join(__dirname, 'config/master_schema.sql'), 'utf8');
+        
+        // Split schema into individual statements
+        const statements = masterSchema
+            .split(';')
+            .filter(statement => statement.trim())
+            .map(statement => statement.trim() + ';');
+        
+        // Execute each statement
+        for (const statement of statements) {
+            await executeMasterQuery(statement);
+        }
+        
+        console.log('Master database initialized successfully');
+    } catch (error) {
+        console.error('Error initializing master database:', error);
+        process.exit(1);
+    }
+};
+
+// Initialize master database on startup
+initializeMasterDatabase().catch(err => {
+    console.error('Failed to initialize master database:', err);
     process.exit(1);
 });
 
 // Routes
+app.use('/api/super-admin', require('./routes/superAdmin'));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/users', require('./routes/users'));
 app.use('/api/patients', require('./routes/patients'));
 app.use('/api/visits', require('./routes/visits'));
 app.use('/api/glasses', require('./routes/glasses'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/sales', require('./routes/sales'));
+app.use('/api/clinics', require('./routes/clinics'));
 
 // 404 handler
 app.use((req, res) => {

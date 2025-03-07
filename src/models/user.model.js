@@ -1,4 +1,4 @@
-const db = require('../config/database');
+const { executeClinicQuery } = require('../config/database');
 const bcrypt = require('bcryptjs');
 
 const Roles = {
@@ -10,9 +10,10 @@ const Roles = {
 };
 
 class User {
-    static async create(userData) {
+    static async create(userData, clinicDbName) {
         const hashedPassword = await bcrypt.hash(userData.password, 10);
-        const [result] = await db.execute(
+        const [result] = await executeClinicQuery(
+            clinicDbName,
             `INSERT INTO users (
                 username,
                 email,
@@ -21,9 +22,14 @@ class User {
                 first_name,
                 last_name,
                 phone_number,
+                national_id,
+                age,
+                gender,
+                address,
+                medical_license_number,
                 clinic_id,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
             [
                 userData.username,
                 userData.email,
@@ -32,13 +38,18 @@ class User {
                 userData.firstName,
                 userData.lastName,
                 userData.phoneNumber,
+                userData.nationalId,
+                userData.age,
+                userData.gender,
+                userData.address,
+                userData.medicalLicenseNumber,
                 userData.clinicId
             ]
         );
         return result.insertId;
     }
 
-    static async update(userId, userData) {
+    static async update(userId, userData, clinicDbName) {
         const updateFields = [];
         const values = [];
 
@@ -58,6 +69,26 @@ class User {
             updateFields.push('phone_number = ?');
             values.push(userData.phoneNumber);
         }
+        if (userData.nationalId) {
+            updateFields.push('national_id = ?');
+            values.push(userData.nationalId);
+        }
+        if (userData.age) {
+            updateFields.push('age = ?');
+            values.push(userData.age);
+        }
+        if (userData.gender) {
+            updateFields.push('gender = ?');
+            values.push(userData.gender);
+        }
+        if (userData.address) {
+            updateFields.push('address = ?');
+            values.push(userData.address);
+        }
+        if (userData.medicalLicenseNumber) {
+            updateFields.push('medical_license_number = ?');
+            values.push(userData.medicalLicenseNumber);
+        }
         if (userData.role) {
             updateFields.push('role = ?');
             values.push(userData.role);
@@ -65,6 +96,10 @@ class User {
         if (userData.clinicId) {
             updateFields.push('clinic_id = ?');
             values.push(userData.clinicId);
+        }
+        if (userData.isActive !== undefined) {
+            updateFields.push('is_active = ?');
+            values.push(userData.isActive);
         }
         if (userData.password) {
             const hashedPassword = await bcrypt.hash(userData.password, 10);
@@ -76,17 +111,21 @@ class User {
 
         values.push(userId);
         
-        const [result] = await db.execute(
+        const [result] = await executeClinicQuery(
+            clinicDbName,
             `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`,
             values
         );
         return result.affectedRows > 0;
     }
 
-    static async getById(id) {
-        const [rows] = await db.execute(
+    static async getById(id, clinicDbName) {
+        const [rows] = await executeClinicQuery(
+            clinicDbName,
             `SELECT id, username, email, role, first_name, last_name, 
-                    phone_number, clinic_id, created_at, updated_at
+                    phone_number, national_id, age, gender, address,
+                    medical_license_number, clinic_id, is_active,
+                    created_at, updated_at
              FROM users 
              WHERE id = ?`,
             [id]
@@ -94,26 +133,30 @@ class User {
         return rows[0];
     }
 
-    static async getByEmail(email) {
-        const [rows] = await db.execute(
+    static async getByEmail(email, clinicDbName) {
+        const [rows] = await executeClinicQuery(
+            clinicDbName,
             'SELECT * FROM users WHERE email = ?',
             [email]
         );
         return rows[0];
     }
 
-    static async getByUsername(username) {
-        const [rows] = await db.execute(
+    static async getByUsername(username, clinicDbName) {
+        const [rows] = await executeClinicQuery(
+            clinicDbName,
             'SELECT * FROM users WHERE username = ?',
             [username]
         );
         return rows[0];
     }
 
-    static async getAll(filters = {}) {
+    static async getAll(filters = {}, clinicDbName) {
         let query = `
             SELECT id, username, email, role, first_name, last_name, 
-                   phone_number, clinic_id, created_at, updated_at
+                   phone_number, national_id, age, gender, address,
+                   medical_license_number, clinic_id, is_active,
+                   created_at, updated_at
             FROM users 
             WHERE 1=1
         `;
@@ -127,28 +170,36 @@ class User {
             query += ' AND clinic_id = ?';
             values.push(filters.clinicId);
         }
+        if (filters.isActive !== undefined) {
+            query += ' AND is_active = ?';
+            values.push(filters.isActive);
+        }
         if (filters.search) {
             query += ` AND (
                 username LIKE ? OR 
                 email LIKE ? OR 
                 first_name LIKE ? OR 
                 last_name LIKE ? OR 
-                phone_number LIKE ?
+                phone_number LIKE ? OR
+                national_id LIKE ?
             )`;
             const searchTerm = `%${filters.search}%`;
-            values.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+            values.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
         }
 
         query += ' ORDER BY created_at DESC';
 
-        const [rows] = await db.execute(query, values);
+        const [rows] = await executeClinicQuery(clinicDbName, query, values);
         return rows;
     }
 
-    static async getClinicStaff(clinicId) {
-        const [rows] = await db.execute(
+    static async getClinicStaff(clinicId, clinicDbName) {
+        const [rows] = await executeClinicQuery(
+            clinicDbName,
             `SELECT id, username, email, role, first_name, last_name, 
-                    phone_number, created_at, updated_at
+                    phone_number, national_id, age, gender, address,
+                    medical_license_number, is_active,
+                    created_at, updated_at
              FROM users 
              WHERE clinic_id = ? AND role != ?
              ORDER BY role, created_at DESC`,
@@ -157,9 +208,10 @@ class User {
         return rows;
     }
 
-    static async delete(id) {
-        const [result] = await db.execute(
-            'DELETE FROM users WHERE id = ?',
+    static async delete(id, clinicDbName) {
+        const [result] = await executeClinicQuery(
+            clinicDbName,
+            'UPDATE users SET is_active = FALSE WHERE id = ?',
             [id]
         );
         return result.affectedRows > 0;

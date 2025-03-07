@@ -1,107 +1,158 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
-const pool = mysql.createPool({
+// Main connection pool for the master database
+const masterPool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'optometry_clinic',
+  database: process.env.DB_NAME || 'optometry_master',
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0,
-  charset: 'utf8mb4',
-  collation: 'utf8mb4_persian_ci'
+  queueLimit: 0
 });
 
-// Test database connection
-const testConnection = async () => {
-  let connection;
+// Store clinic-specific connection pools
+const clinicPools = new Map();
+
+/**
+ * Get a connection to the master database
+ * @returns {Promise<mysql.Connection>} Database connection
+ */
+async function getMasterConnection() {
+  return await masterPool.getConnection();
+}
+
+/**
+ * Get a connection to a specific clinic's database
+ * @param {string} clinicDbName - The database name for the clinic
+ * @returns {Promise<mysql.Connection>} Database connection
+ */
+async function getClinicConnection(clinicDbName) {
+  if (!clinicDbName) {
+    throw new Error('Clinic database name is required');
+  }
+
+  // If we already have a pool for this clinic, use it
+  if (clinicPools.has(clinicDbName)) {
+    return await clinicPools.get(clinicDbName).getConnection();
+  }
+
+  // Otherwise, create a new pool
+  const pool = mysql.createPool({
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: clinicDbName,
+    waitForConnections: true,
+    connectionLimit: 5,
+    queueLimit: 0
+  });
+
+  clinicPools.set(clinicDbName, pool);
+  return await pool.getConnection();
+}
+
+/**
+ * Create a new database for a clinic
+ * @param {string} clinicName - The name of the clinic
+ * @param {string} clinicDbName - The database name to create
+ * @returns {Promise<boolean>} Success status
+ */
+async function createClinicDatabase(clinicName, clinicDbName) {
+  const connection = await getMasterConnection();
   try {
-    connection = await pool.getConnection();
-    console.log('Database connection successful');
+    // Create the database
+    await connection.query(`CREATE DATABASE IF NOT EXISTS ${clinicDbName} CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci`);
+    
+    // Use the new database
+    await connection.query(`USE ${clinicDbName}`);
+    
+    // Execute the schema creation script
+    const schemaScript = require('fs').readFileSync(__dirname + '/schema.sql', 'utf8');
+    const statements = schemaScript
+      .split(';')
+      .filter(statement => statement.trim() !== '')
+      .map(statement => statement.trim() + ';');
+    
+    // Skip the first statement which is the CREATE DATABASE statement
+    for (let i = 1; i < statements.length; i++) {
+      await connection.query(statements[i]);
+    }
+    
+    // Insert clinic information
+    await connection.query(
+      `INSERT INTO clinics (name, created_at) VALUES (?, NOW())`,
+      [clinicName]
+    );
+    
     return true;
   } catch (error) {
-    console.error('Error connecting to database:', error);
+    console.error('Error creating clinic database:', error);
     throw error;
   } finally {
-    if (connection) connection.release();
+    connection.release();
   }
-};
+}
 
-// Execute a query with parameters
-const executeQuery = async (sql, params = []) => {
-  let connection;
-  try {
-    connection = await pool.getConnection();
-    const [results] = await connection.execute(sql, params);
-    return results;
-  } catch (error) {
-    console.error('Error executing query:', error);
-    throw error;
-  } finally {
-    if (connection) connection.release();
+/**
+ * Execute a query on the master database
+ * @param {string} sql - SQL query
+ * @param {Array} params - Query parameters
+ * @returns {Promise<Array>} Query results
+ */
+async function executeMasterQuery(sql, params = []) {
+  return await masterPool.execute(sql, params);
+}
+
+/**
+ * Execute a query on a specific clinic's database
+ * @param {string} clinicDbName - The database name for the clinic
+ * @param {string} sql - SQL query
+ * @param {Array} params - Query parameters
+ * @returns {Promise<Array>} Query results
+ */
+async function executeClinicQuery(clinicDbName, sql, params = []) {
+  if (!clinicDbName) {
+    throw new Error('Clinic database name is required');
   }
-};
-
-// Execute a transaction
-const executeTransaction = async (queries) => {
-  let connection;
-  try {
-    connection = await pool.getConnection();
-    await connection.beginTransaction();
-
-    const results = [];
-    for (const query of queries) {
-      const [result] = await connection.execute(query.sql, query.params || []);
-      results.push(result);
-    }
-
-    await connection.commit();
-    return results;
-  } catch (error) {
-    if (connection) await connection.rollback();
-    console.error('Error executing transaction:', error);
-    throw error;
-  } finally {
-    if (connection) connection.release();
+  
+  // If we don't have a pool for this clinic yet, create one
+  if (!clinicPools.has(clinicDbName)) {
+    const pool = mysql.createPool({
+      host: process.env.DB_HOST || 'localhost',
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASSWORD || '',
+      database: clinicDbName,
+      waitForConnections: true,
+      connectionLimit: 5,
+      queueLimit: 0
+    });
+    clinicPools.set(clinicDbName, pool);
   }
-};
+  
+  return await clinicPools.get(clinicDbName).execute(sql, params);
+}
 
-// Initialize database tables
-const initializeTables = async () => {
-  let connection;
-  try {
-    connection = await pool.getConnection();
-    
-    // Read and execute schema.sql
-    const fs = require('fs');
-    const path = require('path');
-    const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
-    
-    // Split schema into individual statements
-    const statements = schema
-      .split(';')
-      .filter(statement => statement.trim())
-      .map(statement => statement + ';');
-
-    // Execute each statement
-    for (const statement of statements) {
-      await connection.execute(statement);
-    }
-
-    console.log('Database tables initialized successfully');
-  } catch (error) {
-    console.error('Error initializing database tables:', error);
-    throw error;
-  } finally {
-    if (connection) connection.release();
-  }
-};
+/**
+ * List all clinic databases
+ * @returns {Promise<Array>} List of clinic databases
+ */
+async function listClinicDatabases() {
+  const [rows] = await executeMasterQuery(
+    `SELECT table_schema FROM information_schema.tables 
+     WHERE table_schema LIKE 'optometry_%' 
+     AND table_schema != 'optometry_master'
+     GROUP BY table_schema`
+  );
+  return rows.map(row => row.table_schema);
+}
 
 module.exports = {
-  pool,
-  testConnection,
-  executeQuery,
-  executeTransaction,
-  initializeTables
+  getMasterConnection,
+  getClinicConnection,
+  createClinicDatabase,
+  executeMasterQuery,
+  executeClinicQuery,
+  listClinicDatabases
 }; 

@@ -4,6 +4,8 @@ const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const { User, Roles } = require('../models/user.model');
 const { auth } = require('../middleware/auth');
+const authController = require('../controllers/auth.controller');
+const { authenticate } = require('../middleware/auth.middleware');
 
 // Login
 router.post('/login', [
@@ -148,5 +150,34 @@ router.put('/me', auth, [
         res.status(500).json({ error: 'خطا در بروزرسانی اطلاعات کاربر' });
     }
 });
+
+// User login for a specific clinic
+router.post(
+  '/login',
+  [
+    body('username').notEmpty().withMessage('نام کاربری الزامی است'),
+    body('password').notEmpty().withMessage('رمز عبور الزامی است'),
+    body('clinicId').notEmpty().withMessage('شناسه مطب الزامی است')
+  ],
+  authController.userLogin
+);
+
+// Protected routes (require authentication)
+router.use(authenticate);
+
+// Get user profile
+router.get('/profile', authController.getProfile);
+
+// Change password
+router.post(
+  '/change-password',
+  [
+    body('currentPassword').notEmpty().withMessage('رمز عبور فعلی الزامی است'),
+    body('newPassword')
+      .isLength({ min: 6 })
+      .withMessage('رمز عبور جدید باید حداقل 6 کاراکتر باشد')
+  ],
+  authController.changePassword
+);
 
 module.exports = router; 
