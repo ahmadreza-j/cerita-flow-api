@@ -10,13 +10,18 @@ const { promisify } = require("util");
 async function setupSuperAdmin() {
   try {
     // بررسی وجود کاربر ادمین
-    const [admins] = await executeMasterQuery(
-      "SELECT COUNT(*) as count FROM super_admins"
-    );
+    try {
+      const [admins] = await executeMasterQuery(
+        "SELECT COUNT(*) as count FROM super_admins"
+      );
 
-    if (admins[0].count > 0) {
-      console.log("کاربر ادمین قبلاً ایجاد شده است.");
-      return;
+      if (admins[0].count > 0) {
+        console.log("کاربر ادمین قبلاً ایجاد شده است.");
+        return;
+      }
+    } catch (error) {
+      console.error("خطا در بررسی وجود کاربر ادمین:", error);
+      throw new Error("خطا در بررسی وجود کاربر ادمین");
     }
 
     // اگر متغیرهای محیطی برای ایجاد ادمین وجود داشته باشند، از آنها استفاده می‌کنیم
