@@ -6,7 +6,7 @@ const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
 const fs = require("fs");
 const path = require("path");
-const { executeMasterQuery } = require("./config/database");
+const { executeMasterQuery, initializeMasterDb } = require("./config/database");
 const { setupSuperAdmin } = require("./utils/setupAdmin");
 
 const app = express();
@@ -39,6 +39,9 @@ app.use(express.urlencoded({ extended: true }));
 // Initialize master database
 const initializeMasterDatabase = async () => {
   try {
+    // First, ensure the master database exists
+    await initializeMasterDb();
+
     // Read master_schema.sql and clinic_schema.sql
     let masterSchema = fs.readFileSync(
       path.join(__dirname, "config/master_schema.sql"),
@@ -58,12 +61,8 @@ const initializeMasterDatabase = async () => {
     masterSchema = masterSchema.replace(/\${DB_NAME}/g, masterDbName);
     clinicSchema = clinicSchema.replace(/\${DB_NAME}/g, clinicDbName);
 
-    // Write updated schema files
-    fs.writeFileSync(
-      path.join(__dirname, "config/clinic_schema.sql.tmp"),
-      clinicSchema,
-      "utf8"
-    );
+    // Store the processed clinic schema in a global variable for later use
+    global.processedClinicSchema = clinicSchema;
 
     // Split schema into individual statements
     const statements = masterSchema
@@ -74,20 +73,24 @@ const initializeMasterDatabase = async () => {
     // Execute each statement
     for (const statement of statements) {
       try {
-        await executeMasterQuery(statement);
-      } catch (err) {
-        // If the error is not about database already existing, rethrow it
-        if (!err.message.includes("database exists")) {
-          throw err;
+        // Skip comments and CREATE DATABASE statements
+        if (
+          !statement.trim().startsWith("--") &&
+          !statement.toUpperCase().includes("CREATE DATABASE") &&
+          statement.trim() !== ";"
+        ) {
+          await executeMasterQuery(statement);
         }
-        console.log(`Note: ${err.message}`);
+      } catch (err) {
+        console.error("Error executing SQL statement:", err);
+        console.log("Statement that caused error:", statement);
       }
     }
 
     // Setup super admin user if needed
     await setupSuperAdmin();
 
-    console.log("Master database initialized successfully");
+    console.log("Master database tables initialized successfully");
   } catch (error) {
     console.error("Error initializing master database:", error);
     // Don't exit the process, try to continue with the application

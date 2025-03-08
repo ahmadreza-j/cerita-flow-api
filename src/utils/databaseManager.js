@@ -1,19 +1,18 @@
-const mysql = require('mysql2/promise');
-const fs = require('fs');
-const path = require('path');
-require('dotenv').config();
+const mysql = require("mysql2/promise");
+const fs = require("fs");
+const path = require("path");
+require("dotenv").config();
 
 // Main connection pool for the master database
 const masterPool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.MASTER_DB_NAME || 'optometry_master',
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "",
+  database: process.env.MASTER_DB_NAME || "optometry_master",
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  charset: 'utf8mb4',
-  collation: 'utf8mb4_persian_ci'
+  charset: "utf8mb4",
 });
 
 // Store connection pools for each clinic
@@ -26,14 +25,18 @@ async function initializeMasterDatabase() {
   let connection;
   try {
     connection = await masterPool.getConnection();
-    
+
     // Create master database if it doesn't exist
-    await connection.query(`CREATE DATABASE IF NOT EXISTS ${process.env.MASTER_DB_NAME || 'optometry_master'} 
+    await connection.query(`CREATE DATABASE IF NOT EXISTS ${
+      process.env.MASTER_DB_NAME || "optometry_master"
+    } 
                            CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci`);
-    
+
     // Use master database
-    await connection.query(`USE ${process.env.MASTER_DB_NAME || 'optometry_master'}`);
-    
+    await connection.query(
+      `USE ${process.env.MASTER_DB_NAME || "optometry_master"}`
+    );
+
     // Create clinics table if it doesn't exist
     await connection.query(`
       CREATE TABLE IF NOT EXISTS clinics (
@@ -53,7 +56,7 @@ async function initializeMasterDatabase() {
         INDEX idx_db_name (db_name)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci
     `);
-    
+
     // Create admin users table if it doesn't exist
     await connection.query(`
       CREATE TABLE IF NOT EXISTS admin_users (
@@ -70,10 +73,10 @@ async function initializeMasterDatabase() {
         INDEX idx_email (email)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci
     `);
-    
-    console.log('Master database initialized successfully');
+
+    console.log("Master database initialized successfully");
   } catch (error) {
-    console.error('Error initializing master database:', error);
+    console.error("Error initializing master database:", error);
     throw error;
   } finally {
     if (connection) connection.release();
@@ -92,25 +95,27 @@ async function createClinicDatabase(clinicName, dbName, clinicData) {
   try {
     // Validate database name (only alphanumeric and underscores)
     if (!/^[a-zA-Z0-9_]+$/.test(dbName)) {
-      throw new Error('نام دیتابیس فقط می‌تواند شامل حروف انگلیسی، اعداد و زیرخط باشد');
+      throw new Error(
+        "نام دیتابیس فقط می‌تواند شامل حروف انگلیسی، اعداد و زیرخط باشد"
+      );
     }
-    
+
     masterConnection = await masterPool.getConnection();
-    
+
     // Check if database name already exists
     const [existingDb] = await masterConnection.query(
-      'SELECT id FROM clinics WHERE db_name = ?',
+      "SELECT id FROM clinics WHERE db_name = ?",
       [dbName]
     );
-    
+
     if (existingDb.length > 0) {
-      throw new Error('این نام دیتابیس قبلاً استفاده شده است');
+      throw new Error("این نام دیتابیس قبلاً استفاده شده است");
     }
-    
+
     // Create the new database
     await masterConnection.query(`CREATE DATABASE IF NOT EXISTS ${dbName} 
                                 CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci`);
-    
+
     // Insert clinic record in master database
     const [result] = await masterConnection.query(
       `INSERT INTO clinics (name, db_name, address, phone, manager_name, establishment_year, logo_url, manager_id)
@@ -123,21 +128,21 @@ async function createClinicDatabase(clinicName, dbName, clinicData) {
         clinicData.managerName || null,
         clinicData.establishmentYear || null,
         clinicData.logoUrl || null,
-        clinicData.managerId || null
+        clinicData.managerId || null,
       ]
     );
-    
+
     const clinicId = result.insertId;
-    
+
     // Initialize the clinic database schema
     await initializeClinicSchema(dbName);
-    
+
     // Create a connection pool for this clinic
     createClinicConnectionPool(dbName);
-    
+
     return clinicId;
   } catch (error) {
-    console.error('Error creating clinic database:', error);
+    console.error("Error creating clinic database:", error);
     throw error;
   } finally {
     if (masterConnection) masterConnection.release();
@@ -153,40 +158,42 @@ async function initializeClinicSchema(dbName) {
   try {
     // Create a temporary connection to the new database
     const tempPool = mysql.createPool({
-      host: process.env.DB_HOST || 'localhost',
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || '',
+      host: process.env.DB_HOST || "localhost",
+      user: process.env.DB_USER || "root",
+      password: process.env.DB_PASSWORD || "",
       database: dbName,
       waitForConnections: true,
       connectionLimit: 1,
       queueLimit: 0,
-      charset: 'utf8mb4',
-      collation: 'utf8mb4_persian_ci'
+      charset: "utf8mb4",
     });
-    
+
     connection = await tempPool.getConnection();
-    
+
     // Read and execute schema.sql
-    const schemaPath = path.join(__dirname, '../config/clinic_schema.sql');
-    const schema = fs.readFileSync(schemaPath, 'utf8');
-    
+    const schemaPath = path.join(__dirname, "../config/clinic_schema.sql");
+    const schema = fs.readFileSync(schemaPath, "utf8");
+
     // Split schema into individual statements
     const statements = schema
-      .split(';')
-      .filter(statement => statement.trim())
-      .map(statement => statement + ';');
-    
+      .split(";")
+      .filter((statement) => statement.trim())
+      .map((statement) => statement + ";");
+
     // Execute each statement
     for (const statement of statements) {
       await connection.execute(statement);
     }
-    
+
     // Close the temporary pool
     await tempPool.end();
-    
+
     console.log(`Clinic database ${dbName} schema initialized successfully`);
   } catch (error) {
-    console.error(`Error initializing clinic database ${dbName} schema:`, error);
+    console.error(
+      `Error initializing clinic database ${dbName} schema:`,
+      error
+    );
     throw error;
   } finally {
     if (connection) connection.release();
@@ -202,19 +209,18 @@ function createClinicConnectionPool(dbName) {
   if (clinicPools.has(dbName)) {
     return clinicPools.get(dbName);
   }
-  
+
   const pool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
+    host: process.env.DB_HOST || "localhost",
+    user: process.env.DB_USER || "root",
+    password: process.env.DB_PASSWORD || "",
     database: dbName,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
-    charset: 'utf8mb4',
-    collation: 'utf8mb4_persian_ci'
+    charset: "utf8mb4",
   });
-  
+
   clinicPools.set(dbName, pool);
   return pool;
 }
@@ -228,7 +234,7 @@ function getClinicPool(dbName) {
   if (!clinicPools.has(dbName)) {
     createClinicConnectionPool(dbName);
   }
-  
+
   return clinicPools.get(dbName);
 }
 
@@ -240,14 +246,14 @@ async function getAllClinics() {
   let connection;
   try {
     connection = await masterPool.getConnection();
-    
+
     const [rows] = await connection.query(
-      'SELECT * FROM clinics WHERE is_active = TRUE ORDER BY name'
+      "SELECT * FROM clinics WHERE is_active = TRUE ORDER BY name"
     );
-    
+
     return rows;
   } catch (error) {
-    console.error('Error getting clinics:', error);
+    console.error("Error getting clinics:", error);
     throw error;
   } finally {
     if (connection) connection.release();
@@ -263,15 +269,15 @@ async function getClinicById(id) {
   let connection;
   try {
     connection = await masterPool.getConnection();
-    
+
     const [rows] = await connection.query(
-      'SELECT * FROM clinics WHERE id = ?',
+      "SELECT * FROM clinics WHERE id = ?",
       [id]
     );
-    
+
     return rows[0] || null;
   } catch (error) {
-    console.error('Error getting clinic:', error);
+    console.error("Error getting clinic:", error);
     throw error;
   } finally {
     if (connection) connection.release();
@@ -287,15 +293,15 @@ async function getClinicByDbName(dbName) {
   let connection;
   try {
     connection = await masterPool.getConnection();
-    
+
     const [rows] = await connection.query(
-      'SELECT * FROM clinics WHERE db_name = ?',
+      "SELECT * FROM clinics WHERE db_name = ?",
       [dbName]
     );
-    
+
     return rows[0] || null;
   } catch (error) {
-    console.error('Error getting clinic by db name:', error);
+    console.error("Error getting clinic by db name:", error);
     throw error;
   } finally {
     if (connection) connection.release();
@@ -312,7 +318,7 @@ async function getClinicByDbName(dbName) {
 async function executeClinicQuery(dbName, sql, params = []) {
   const pool = getClinicPool(dbName);
   let connection;
-  
+
   try {
     connection = await pool.getConnection();
     const [results] = await connection.execute(sql, params);
@@ -334,17 +340,17 @@ async function executeClinicQuery(dbName, sql, params = []) {
 async function executeClinicTransaction(dbName, queries) {
   const pool = getClinicPool(dbName);
   let connection;
-  
+
   try {
     connection = await pool.getConnection();
     await connection.beginTransaction();
-    
+
     const results = [];
     for (const query of queries) {
       const [result] = await connection.execute(query.sql, query.params || []);
       results.push(result);
     }
-    
+
     await connection.commit();
     return results;
   } catch (error) {
@@ -365,5 +371,5 @@ module.exports = {
   getClinicById,
   getClinicByDbName,
   executeClinicQuery,
-  executeClinicTransaction
-}; 
+  executeClinicTransaction,
+};

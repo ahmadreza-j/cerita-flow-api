@@ -1,7 +1,3 @@
--- Create master database if not exists
-CREATE DATABASE IF NOT EXISTS ${DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci;
-USE ${DB_NAME};
-
 -- Super admin users table
 CREATE TABLE IF NOT EXISTS super_admins (
     id INT PRIMARY KEY AUTO_INCREMENT,
