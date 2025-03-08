@@ -542,107 +542,41 @@ const getClinicManagers = async (req, res) => {
     let clinicId = req.clinic ? req.clinic.id : null;
     let clinicDbName = req.clinicDbName;
     
-    // For super admin
-    if (req.user.isSuperAdmin) {
-      // If clinicId is specified, get managers for that clinic
-      if (req.query.clinicId) {
-        clinicId = req.query.clinicId;
-        
-        // Get clinic database name for the specified clinicId
-        const result = await executeMasterQuery(
-          'SELECT id, name, db_name FROM clinics WHERE id = ?',
-          [clinicId]
-        );
-        
-        if (result.length === 0) {
-          return res.status(404).json({ message: 'کلینیک مورد نظر یافت نشد' });
-        }
-        
-        clinicDbName = result[0].db_name;
-        
-        // Get clinic managers only
-        const filters = {
-          role: Roles.CLINIC_MANAGER,
-          clinicId,
-          isActive: req.query.isActive === 'true' ? true : 
-                    req.query.isActive === 'false' ? false : undefined,
-          search: req.query.search
-        };
-        
-        const managers = await User.getAll(filters, clinicDbName);
-        
-        // Remove sensitive information
-        const sanitizedManagers = managers.map(manager => {
-          const { password, ...managerWithoutPassword } = manager;
-          return managerWithoutPassword;
-        });
-        
-        return res.json({ managers: sanitizedManagers });
-      } else {
-        // If no clinicId is specified, get managers from all clinics
-        const clinics = await executeMasterQuery(
-          'SELECT id, name, db_name FROM clinics WHERE is_active = 1',
-          []
-        );
-        
-        if (clinics.length === 0) {
-          return res.json({ managers: [] });
-        }
-        
-        // Get managers from all clinics
-        let allManagers = [];
-        
-        for (const clinic of clinics) {
-          try {
-            const filters = {
-              role: Roles.CLINIC_MANAGER,
-              clinicId: clinic.id,
-              isActive: req.query.isActive === 'true' ? true : 
-                        req.query.isActive === 'false' ? false : undefined,
-              search: req.query.search
-            };
-            
-            const managers = await User.getAll(filters, clinic.db_name);
-            
-            // Add clinic information to each manager
-            const managersWithClinic = managers.map(manager => {
-              const { password, ...managerWithoutPassword } = manager;
-              return {
-                ...managerWithoutPassword,
-                clinicName: clinic.name
-              };
-            });
-            
-            allManagers = [...allManagers, ...managersWithClinic];
-          } catch (error) {
-            console.error(`Error getting managers from clinic ${clinic.id}:`, error);
-            // Continue with next clinic
-          }
-        }
-        
-        return res.json({ managers: allManagers });
+    // For super admin, can filter by clinicId
+    if (req.user.isSuperAdmin && req.query.clinicId) {
+      clinicId = req.query.clinicId;
+      
+      // Get clinic database name for the specified clinicId
+      const result = await executeMasterQuery(
+        'SELECT id, name, db_name FROM clinics WHERE id = ?',
+        [clinicId]
+      );
+      
+      if (result.length === 0) {
+        return res.status(404).json({ message: 'کلینیک مورد نظر یافت نشد' });
       }
-    } else {
-      // Regular admin or clinic manager is making the request
-      // Only return managers for the current clinic
-      const filters = {
-        role: Roles.CLINIC_MANAGER,
-        clinicId,
-        isActive: req.query.isActive === 'true' ? true : 
-                  req.query.isActive === 'false' ? false : undefined,
-        search: req.query.search
-      };
       
-      const managers = await User.getAll(filters, clinicDbName);
-      
-      // Remove sensitive information
-      const sanitizedManagers = managers.map(manager => {
-        const { password, ...managerWithoutPassword } = manager;
-        return managerWithoutPassword;
-      });
-      
-      return res.json({ managers: sanitizedManagers });
+      clinicDbName = result[0].db_name;
     }
+    
+    // Get clinic managers only
+    const filters = {
+      role: Roles.CLINIC_MANAGER,
+      clinicId,
+      isActive: req.query.isActive === 'true' ? true : 
+                req.query.isActive === 'false' ? false : undefined,
+      search: req.query.search
+    };
+    
+    const managers = await User.getAll(filters, clinicDbName);
+    
+    // Remove sensitive information
+    const sanitizedManagers = managers.map(manager => {
+      const { password, ...managerWithoutPassword } = manager;
+      return managerWithoutPassword;
+    });
+    
+    res.json({ managers: sanitizedManagers });
   } catch (error) {
     console.error('Get clinic managers error:', error);
     res.status(500).json({ message: 'خطا در دریافت اطلاعات مدیران کلینیک' });
