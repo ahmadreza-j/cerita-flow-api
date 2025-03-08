@@ -220,6 +220,53 @@ class User {
     static async validatePassword(user, password) {
         return bcrypt.compare(password, user.password);
     }
+
+    static async getAllWithFilters(filters = {}, clinicDbName) {
+        if (!clinicDbName) {
+            throw new Error('Clinic database name is required');
+        }
+
+        let query = 'SELECT * FROM users WHERE 1=1';
+        const values = [];
+
+        // Filter by role(s)
+        if (filters.role) {
+            query += ' AND role = ?';
+            values.push(filters.role);
+        }
+
+        // Exclude specific roles
+        if (filters.excludeRoles && Array.isArray(filters.excludeRoles) && filters.excludeRoles.length > 0) {
+            const placeholders = filters.excludeRoles.map(() => '?').join(', ');
+            query += ` AND role NOT IN (${placeholders})`;
+            values.push(...filters.excludeRoles);
+        }
+
+        // Filter by clinic
+        if (filters.clinicId) {
+            query += ' AND clinic_id = ?';
+            values.push(filters.clinicId);
+        }
+
+        // Filter by active status
+        if (filters.isActive !== undefined) {
+            query += ' AND is_active = ?';
+            values.push(filters.isActive);
+        }
+
+        // Search by name, email, or username
+        if (filters.search) {
+            query += ' AND (username LIKE ? OR email LIKE ? OR first_name LIKE ? OR last_name LIKE ?)';
+            const searchTerm = `%${filters.search}%`;
+            values.push(searchTerm, searchTerm, searchTerm, searchTerm);
+        }
+
+        // Order by created_at
+        query += ' ORDER BY created_at DESC';
+
+        const [rows] = await executeClinicQuery(clinicDbName, query, values);
+        return rows;
+    }
 }
 
 module.exports = {

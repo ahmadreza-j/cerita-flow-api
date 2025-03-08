@@ -3,7 +3,9 @@ const router = express.Router();
 const { body } = require('express-validator');
 const authController = require('../controllers/auth.controller');
 const clinicController = require('../controllers/clinic.controller');
+const userController = require('../controllers/user.controller');
 const { authenticate, requireSuperAdmin } = require('../middleware/auth.middleware');
+const { Roles } = require('../models/user.model');
 
 // Super admin authentication routes
 router.post(
@@ -66,5 +68,49 @@ router.put(
 );
 
 router.delete('/clinics/:id', clinicController.deleteClinic);
+
+// User management routes for super admin
+router.post(
+  '/users',
+  [
+    body('username').notEmpty().withMessage('نام کاربری الزامی است'),
+    body('email').isEmail().withMessage('ایمیل نامعتبر است'),
+    body('password').isLength({ min: 6 }).withMessage('رمز عبور باید حداقل 6 کاراکتر باشد'),
+    body('firstName').notEmpty().withMessage('نام الزامی است'),
+    body('lastName').notEmpty().withMessage('نام خانوادگی الزامی است'),
+    body('role').isIn(Object.values(Roles)).withMessage('نقش کاربری نامعتبر است'),
+    body('clinicId').notEmpty().withMessage('شناسه کلینیک الزامی است')
+  ],
+  userController.createUser
+);
+
+router.get('/users', userController.getAllUsers);
+router.get('/users/:id', userController.getUserById);
+
+router.put(
+  '/users/:id',
+  [
+    body('username').optional(),
+    body('email').optional().isEmail().withMessage('ایمیل نامعتبر است'),
+    body('password').optional().isLength({ min: 6 }).withMessage('رمز عبور باید حداقل 6 کاراکتر باشد'),
+    body('firstName').optional(),
+    body('lastName').optional(),
+    body('phoneNumber').optional(),
+    body('nationalId').optional(),
+    body('age').optional().isNumeric().withMessage('سن باید عدد باشد'),
+    body('gender').optional().isIn(['male', 'female', 'other']).withMessage('جنسیت نامعتبر است'),
+    body('address').optional(),
+    body('medicalLicenseNumber').optional(),
+    body('role').optional().isIn(Object.values(Roles)).withMessage('نقش کاربری نامعتبر است'),
+    body('isActive').optional().isBoolean().withMessage('وضعیت فعال بودن باید true یا false باشد'),
+    body('clinicId').optional()
+  ],
+  userController.updateUser
+);
+
+router.delete('/users/:id', userController.deleteUser);
+
+// Get clinic managers
+router.get('/clinic-managers', userController.getClinicManagers);
 
 module.exports = router; 

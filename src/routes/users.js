@@ -61,4 +61,7 @@ router.delete('/:id', userController.deleteUser);
 // Get clinic staff
 router.get('/clinic/staff', userController.getClinicStaff);
 
+// Get clinic managers
+router.get('/clinic/managers', userController.getClinicManagers);
+
 module.exports = router; 
