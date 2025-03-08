@@ -8,7 +8,7 @@ const masterPool = mysql.createPool({
   host: process.env.DB_HOST || "localhost",
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASSWORD || "",
-  database: process.env.MASTER_DB_NAME || "optometry_master",
+  database: process.env.MASTER_DB_NAME || "optoplus_master",
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
@@ -28,13 +28,13 @@ async function initializeMasterDatabase() {
 
     // Create master database if it doesn't exist
     await connection.query(`CREATE DATABASE IF NOT EXISTS ${
-      process.env.MASTER_DB_NAME || "optometry_master"
+      process.env.MASTER_DB_NAME || "optoplus_master"
     } 
                            CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci`);
 
     // Use master database
     await connection.query(
-      `USE ${process.env.MASTER_DB_NAME || "optometry_master"}`
+      `USE ${process.env.MASTER_DB_NAME || "optoplus_master"}`
     );
 
     // Create clinics table if it doesn't exist

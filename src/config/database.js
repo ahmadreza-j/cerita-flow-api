@@ -18,7 +18,7 @@ const masterPool = mysql.createPool({
   host: process.env.DB_HOST || "localhost",
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASSWORD || "",
-  database: process.env.DB_NAME || "optometry_master",
+  database: process.env.DB_NAME || "optoplus_master",
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
@@ -33,7 +33,7 @@ const clinicPools = new Map();
  */
 async function initializeMasterDb() {
   try {
-    const dbName = process.env.DB_NAME || "optometry_master";
+    const dbName = process.env.DB_NAME || "optoplus_master";
 
     // Create the master database if it doesn't exist
     await rootPool.query(
@@ -131,7 +131,7 @@ async function createClinicDatabase(clinicName, clinicDbName) {
     }
 
     // Switch back to master database
-    await connection.query(`USE ${process.env.DB_NAME || "optometry_master"}`);
+    await connection.query(`USE ${process.env.DB_NAME || "optoplus_master"}`);
 
     // Insert clinic information
     await connection.query(
@@ -164,7 +164,7 @@ async function executeMasterQuery(sql, params = []) {
       !sql.toUpperCase().includes("CREATE DATABASE")
     ) {
       // Try to create the database first
-      const dbName = process.env.DB_NAME || "optometry_master";
+      const dbName = process.env.DB_NAME || "optoplus_master";
       await rootPool.execute(
         `CREATE DATABASE IF NOT EXISTS ${dbName} CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci`
       );
@@ -221,7 +221,7 @@ async function executeClinicQuery(clinicDbName, sql, params = []) {
  * @returns {Promise<Array>} List of clinic databases
  */
 async function listClinicDatabases() {
-  const masterDbName = process.env.DB_NAME || "optometry_master";
+  const masterDbName = process.env.DB_NAME || "optoplus_master";
   const prefix = masterDbName.split("_")[0]; // Extract prefix (e.g., 'optoplus' from 'optoplus_master')
 
   const [rows] = await executeMasterQuery(
