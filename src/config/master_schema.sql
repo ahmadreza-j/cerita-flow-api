@@ -34,13 +34,5 @@ CREATE TABLE IF NOT EXISTS clinics (
     INDEX idx_db_name (db_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
--- Insert default super admin (password: superadmin123)
-INSERT IGNORE INTO super_admins (username, email, password, first_name, last_name, is_active)
-VALUES (
-    'superadmin',
-    'superadmin@example.com',
-    '$2a$10$6jM7G6HNH/QH6lh.z6eQ8O9V4dX.rOCPFWlBXGZy.3nFpBhBKyfuy',
-    'مدیر',
-    'ارشد',
-    true
-); 
+-- NOTE: Super admin user should be created programmatically during first run
+-- or through a secure setup script, not through hardcoded SQL statements 

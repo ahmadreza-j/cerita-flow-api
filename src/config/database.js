@@ -80,10 +80,13 @@ async function createClinicDatabase(clinicName, clinicDbName) {
       await connection.query(statements[i]);
     }
     
+    // Switch back to master database
+    await connection.query(`USE optometry_master`);
+    
     // Insert clinic information
     await connection.query(
-      `INSERT INTO clinics (name, created_at) VALUES (?, NOW())`,
-      [clinicName]
+      `INSERT INTO clinics (name, db_name, created_at) VALUES (?, ?, NOW())`,
+      [clinicName, clinicDbName]
     );
     
     return true;

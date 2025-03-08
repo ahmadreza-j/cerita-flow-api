@@ -1,7 +1,18 @@
+# dependencies
 node_modules/
+
+# environment variables
 .env
 .env.*
-dist/
+
+# logs
 logs/
 *.log
+
+# database files
+*.sql
+
+# other
 .DS_Store
+
+dist/
