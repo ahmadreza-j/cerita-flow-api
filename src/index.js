@@ -8,6 +8,7 @@ const fs = require("fs");
 const path = require("path");
 const { executeMasterQuery, initializeMasterDb } = require("./config/database");
 const { setupSuperAdmin } = require("./utils/setupAdmin");
+const { setupDatabaseTables } = require("./utils/setupDatabase");
 
 const app = express();
 
@@ -41,62 +42,22 @@ const initializeMasterDatabase = async () => {
   try {
     // First, ensure the master database exists
     await initializeMasterDb();
-
-    // Read master_schema.sql and clinic_schema.sql
-    let masterSchema = fs.readFileSync(
-      path.join(__dirname, "config/master_schema.sql"),
-      "utf8"
-    );
-    let clinicSchema = fs.readFileSync(
-      path.join(__dirname, "config/clinic_schema.sql"),
-      "utf8"
-    );
-
-    // Get database names
-    const masterDbName = process.env.DB_NAME || "optometry_master";
-    const prefix = masterDbName.split("_")[0]; // Extract prefix (e.g., 'optoplus' from 'optoplus_master')
-    const clinicDbName = `${prefix}_clinic`;
-
-    // Replace placeholders with actual database names
-    masterSchema = masterSchema.replace(/\${DB_NAME}/g, masterDbName);
-    clinicSchema = clinicSchema.replace(/\${DB_NAME}/g, clinicDbName);
-
-    // Store the processed clinic schema in a global variable for later use
-    global.processedClinicSchema = clinicSchema;
-
-    // Split schema into individual statements
-    const statements = masterSchema
-      .split(";")
-      .filter((statement) => statement.trim())
-      .map((statement) => statement.trim() + ";");
-
-    // Execute each statement
-    for (const statement of statements) {
-      try {
-        // Skip comments and CREATE DATABASE statements
-        if (
-          !statement.trim().startsWith("--") &&
-          !statement.toUpperCase().includes("CREATE DATABASE") &&
-          statement.trim() !== ";"
-        ) {
-          await executeMasterQuery(statement);
-        }
-      } catch (err) {
-        console.error("Error executing SQL statement:", err);
-        console.log("Statement that caused error:", statement);
-      }
-    }
-
+    
+    // Setup database tables
+    await setupDatabaseTables();
+    
     // Setup super admin user if needed
-    await setupSuperAdmin();
-
-    console.log("Master database tables initialized successfully");
+    try {
+      await setupSuperAdmin();
+    } catch (error) {
+      console.error("Error setting up super admin:", error);
+    }
+    
+    console.log("Master database initialization completed successfully");
   } catch (error) {
     console.error("Error initializing master database:", error);
     // Don't exit the process, try to continue with the application
-    console.log(
-      "Attempting to continue despite database initialization error..."
-    );
+    console.log("Attempting to continue despite database initialization error...");
   }
 };
 

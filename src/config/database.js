@@ -40,6 +40,9 @@ async function initializeMasterDb() {
       `CREATE DATABASE IF NOT EXISTS ${dbName} CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci`
     );
 
+    // Use the database
+    await rootPool.query(`USE ${dbName}`);
+
     console.log(`Master database '${dbName}' initialized successfully`);
     return true;
   } catch (error) {
@@ -156,22 +159,27 @@ async function executeMasterQuery(sql, params = []) {
     return await masterPool.execute(sql, params);
   } catch (error) {
     // If the error is about unknown database and the query is not a CREATE DATABASE query
-    if (error.code === 'ER_BAD_DB_ERROR' && !sql.toUpperCase().includes('CREATE DATABASE')) {
+    if (
+      error.code === "ER_BAD_DB_ERROR" &&
+      !sql.toUpperCase().includes("CREATE DATABASE")
+    ) {
       // Try to create the database first
-      const dbName = process.env.DB_NAME || 'optometry_master';
-      await rootPool.execute(`CREATE DATABASE IF NOT EXISTS ${dbName} CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci`);
-      
+      const dbName = process.env.DB_NAME || "optometry_master";
+      await rootPool.execute(
+        `CREATE DATABASE IF NOT EXISTS ${dbName} CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci`
+      );
+
       // Create a new connection pool with the correct database
       const tempPool = mysql.createPool({
-        host: process.env.DB_HOST || 'localhost',
-        user: process.env.DB_USER || 'root',
-        password: process.env.DB_PASSWORD || '',
+        host: process.env.DB_HOST || "localhost",
+        user: process.env.DB_USER || "root",
+        password: process.env.DB_PASSWORD || "",
         database: dbName,
         waitForConnections: true,
         connectionLimit: 10,
-        queueLimit: 0
+        queueLimit: 0,
       });
-      
+
       // Try the query again
       return await tempPool.execute(sql, params);
     }
@@ -188,23 +196,23 @@ async function executeMasterQuery(sql, params = []) {
  */
 async function executeClinicQuery(clinicDbName, sql, params = []) {
   if (!clinicDbName) {
-    throw new Error('Clinic database name is required');
+    throw new Error("Clinic database name is required");
   }
-  
+
   // If we don't have a pool for this clinic yet, create one
   if (!clinicPools.has(clinicDbName)) {
     const pool = mysql.createPool({
-      host: process.env.DB_HOST || 'localhost',
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || '',
+      host: process.env.DB_HOST || "localhost",
+      user: process.env.DB_USER || "root",
+      password: process.env.DB_PASSWORD || "",
       database: clinicDbName,
       waitForConnections: true,
       connectionLimit: 5,
-      queueLimit: 0
+      queueLimit: 0,
     });
     clinicPools.set(clinicDbName, pool);
   }
-  
+
   return await clinicPools.get(clinicDbName).execute(sql, params);
 }
 
@@ -213,9 +221,9 @@ async function executeClinicQuery(clinicDbName, sql, params = []) {
  * @returns {Promise<Array>} List of clinic databases
  */
 async function listClinicDatabases() {
-  const masterDbName = process.env.DB_NAME || 'optometry_master';
-  const prefix = masterDbName.split('_')[0]; // Extract prefix (e.g., 'optoplus' from 'optoplus_master')
-  
+  const masterDbName = process.env.DB_NAME || "optometry_master";
+  const prefix = masterDbName.split("_")[0]; // Extract prefix (e.g., 'optoplus' from 'optoplus_master')
+
   const [rows] = await executeMasterQuery(
     `SELECT table_schema FROM information_schema.tables 
      WHERE table_schema LIKE '${prefix}_%' 
@@ -223,7 +231,7 @@ async function listClinicDatabases() {
      GROUP BY table_schema`,
     [masterDbName]
   );
-  return rows.map(row => row.table_schema);
+  return rows.map((row) => row.table_schema);
 }
 
 module.exports = {
@@ -233,5 +241,5 @@ module.exports = {
   executeMasterQuery,
   executeClinicQuery,
   listClinicDatabases,
-  initializeMasterDb
+  initializeMasterDb,
 };
