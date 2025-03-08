@@ -4,13 +4,27 @@ class Clinic {
   /**
    * Create a new clinic with its own database
    * @param {Object} clinicData - Clinic data
-   * @returns {Promise<number>} Clinic ID
+   * @returns {Promise<Object>} Clinic ID and database name
+   * @throws {Error} If a clinic with the same english name already exists
    */
   static async create(clinicData) {
     // Use the provided englishName for the database name, or generate one if not provided
     let dbName;
     if (clinicData.englishName) {
-      // Sanitize the englishName to ensure it's valid for a database name
+      // Check if a clinic with this english name already exists
+      const [existingClinics] = await executeMasterQuery(
+        'SELECT * FROM clinics WHERE db_name LIKE ?',
+        [`optometry_${this.sanitizeDatabaseName(clinicData.englishName).replace('optometry_', '')}`]
+      );
+
+      if (existingClinics && existingClinics.length > 0) {
+        // Throw error if the english name is already taken
+        const error = new Error('نام انگلیسی کلینیک تکراری است. لطفاً نام دیگری انتخاب کنید');
+        error.code = 'ER_DUPLICATE_ENGLISH_NAME';
+        throw error;
+      }
+
+      // If no duplicates, sanitize the englishName to ensure it's valid for a database name
       dbName = this.sanitizeDatabaseName(clinicData.englishName);
     } else {
       // Fall back to generating a name from the clinic name if englishName is not provided
@@ -54,8 +68,10 @@ class Clinic {
    * @returns {string} Sanitized database name
    */
   static sanitizeDatabaseName(name) {
+    if (!name) return '';
+    
     // Convert to lowercase
-    let sanitized = name.toLowerCase();
+    let sanitized = name.toLowerCase().trim();
     
     // Replace hyphens with underscores (important for MySQL compatibility)
     sanitized = sanitized.replace(/-/g, '_');
@@ -68,8 +84,12 @@ class Clinic {
       sanitized = 'db_' + sanitized;
     }
     
-    // Add prefix
-    return `optometry_${sanitized}`;
+    // Add prefix if not already present
+    if (!sanitized.startsWith('optometry_')) {
+      sanitized = `optometry_${sanitized}`;
+    }
+    
+    return sanitized;
   }
   
   /**

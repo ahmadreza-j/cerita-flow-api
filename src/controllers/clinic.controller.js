@@ -34,6 +34,13 @@ const createClinic = async (req, res) => {
     });
   } catch (error) {
     console.error('Create clinic error:', error);
+    
+    // Handle specific error types
+    if (error.code === 'ER_DUPLICATE_ENGLISH_NAME') {
+      // Send appropriate error message for duplicate english name
+      return res.status(409).json({ message: error.message });
+    }
+    
     res.status(500).json({ message: 'خطا در ایجاد کلینیک' });
   }
 };
