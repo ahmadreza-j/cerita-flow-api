@@ -21,7 +21,7 @@ PORT=3001
 DB_HOST=localhost
 DB_USER=your_db_username
 DB_PASSWORD=your_secure_password
-DB_NAME=optometry_master
+DB_NAME=optoplus_master
 JWT_SECRET=your_random_secure_secret_key
 ```
 

@@ -1,15 +1,17 @@
-const mysql = require('mysql2/promise');
-require('dotenv').config();
+const mysql = require("mysql2/promise");
+require("dotenv").config();
+const path = require("path");
+const fs = require("fs");
 
 // Main connection pool for the master database
 const masterPool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'optometry_master',
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "",
+  database: process.env.DB_NAME || "optometry_master",
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
 });
 
 // Store clinic-specific connection pools
@@ -30,7 +32,7 @@ async function getMasterConnection() {
  */
 async function getClinicConnection(clinicDbName) {
   if (!clinicDbName) {
-    throw new Error('Clinic database name is required');
+    throw new Error("Clinic database name is required");
   }
 
   // If we already have a pool for this clinic, use it
@@ -40,13 +42,13 @@ async function getClinicConnection(clinicDbName) {
 
   // Otherwise, create a new pool
   const pool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
+    host: process.env.DB_HOST || "localhost",
+    user: process.env.DB_USER || "root",
+    password: process.env.DB_PASSWORD || "",
     database: clinicDbName,
     waitForConnections: true,
     connectionLimit: 5,
-    queueLimit: 0
+    queueLimit: 0,
   });
 
   clinicPools.set(clinicDbName, pool);
@@ -63,35 +65,52 @@ async function createClinicDatabase(clinicName, clinicDbName) {
   const connection = await getMasterConnection();
   try {
     // Create the database
-    await connection.query(`CREATE DATABASE IF NOT EXISTS ${clinicDbName} CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci`);
-    
+    await connection.query(
+      `CREATE DATABASE IF NOT EXISTS ${clinicDbName} CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci`
+    );
+
     // Use the new database
     await connection.query(`USE ${clinicDbName}`);
-    
+
     // Execute the schema creation script
-    const schemaScript = require('fs').readFileSync(__dirname + '/schema.sql', 'utf8');
-    const statements = schemaScript
-      .split(';')
-      .filter(statement => statement.trim() !== '')
-      .map(statement => statement.trim() + ';');
-    
-    // Skip the first statement which is the CREATE DATABASE statement
-    for (let i = 1; i < statements.length; i++) {
-      await connection.query(statements[i]);
+    let schemaScript;
+    const tmpSchemaPath = path.join(
+      __dirname,
+      "../config/clinic_schema.sql.tmp"
+    );
+    const originalSchemaPath = path.join(__dirname, "/clinic_schema.sql");
+
+    // Check if temporary schema file exists
+    if (fs.existsSync(tmpSchemaPath)) {
+      schemaScript = fs.readFileSync(tmpSchemaPath, "utf8");
+    } else {
+      schemaScript = fs.readFileSync(originalSchemaPath, "utf8");
     }
-    
+
+    const statements = schemaScript
+      .split(";")
+      .filter((statement) => statement.trim() !== "")
+      .map((statement) => statement.trim() + ";");
+
+    // Execute each statement
+    for (const statement of statements) {
+      if (statement.trim() !== ";") {
+        await connection.query(statement);
+      }
+    }
+
     // Switch back to master database
-    await connection.query(`USE optometry_master`);
-    
+    await connection.query(`USE ${process.env.DB_NAME || "optometry_master"}`);
+
     // Insert clinic information
     await connection.query(
       `INSERT INTO clinics (name, db_name, created_at) VALUES (?, ?, NOW())`,
       [clinicName, clinicDbName]
     );
-    
+
     return true;
   } catch (error) {
-    console.error('Error creating clinic database:', error);
+    console.error("Error creating clinic database:", error);
     throw error;
   } finally {
     connection.release();
@@ -105,7 +124,36 @@ async function createClinicDatabase(clinicName, clinicDbName) {
  * @returns {Promise<Array>} Query results
  */
 async function executeMasterQuery(sql, params = []) {
-  return await masterPool.execute(sql, params);
+  try {
+    return await masterPool.execute(sql, params);
+  } catch (error) {
+    // If the error is about unknown database and the query is not a CREATE DATABASE query
+    if (
+      error.code === "ER_BAD_DB_ERROR" &&
+      !sql.toUpperCase().includes("CREATE DATABASE")
+    ) {
+      // Try to create the database first
+      const dbName = process.env.DB_NAME || "optometry_master";
+      await masterPool.execute(
+        `CREATE DATABASE IF NOT EXISTS ${dbName} CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci`
+      );
+
+      // Create a new connection pool with the correct database
+      const tempPool = mysql.createPool({
+        host: process.env.DB_HOST || "localhost",
+        user: process.env.DB_USER || "root",
+        password: process.env.DB_PASSWORD || "",
+        database: dbName,
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0,
+      });
+
+      // Try the query again
+      return await tempPool.execute(sql, params);
+    }
+    throw error;
+  }
 }
 
 /**
@@ -117,23 +165,23 @@ async function executeMasterQuery(sql, params = []) {
  */
 async function executeClinicQuery(clinicDbName, sql, params = []) {
   if (!clinicDbName) {
-    throw new Error('Clinic database name is required');
+    throw new Error("Clinic database name is required");
   }
-  
+
   // If we don't have a pool for this clinic yet, create one
   if (!clinicPools.has(clinicDbName)) {
     const pool = mysql.createPool({
-      host: process.env.DB_HOST || 'localhost',
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || '',
+      host: process.env.DB_HOST || "localhost",
+      user: process.env.DB_USER || "root",
+      password: process.env.DB_PASSWORD || "",
       database: clinicDbName,
       waitForConnections: true,
       connectionLimit: 5,
-      queueLimit: 0
+      queueLimit: 0,
     });
     clinicPools.set(clinicDbName, pool);
   }
-  
+
   return await clinicPools.get(clinicDbName).execute(sql, params);
 }
 
@@ -142,13 +190,17 @@ async function executeClinicQuery(clinicDbName, sql, params = []) {
  * @returns {Promise<Array>} List of clinic databases
  */
 async function listClinicDatabases() {
+  const masterDbName = process.env.DB_NAME || "optometry_master";
+  const prefix = masterDbName.split("_")[0]; // Extract prefix (e.g., 'optoplus' from 'optoplus_master')
+
   const [rows] = await executeMasterQuery(
     `SELECT table_schema FROM information_schema.tables 
-     WHERE table_schema LIKE 'optometry_%' 
-     AND table_schema != 'optometry_master'
-     GROUP BY table_schema`
+     WHERE table_schema LIKE '${prefix}_%' 
+     AND table_schema != ?
+     GROUP BY table_schema`,
+    [masterDbName]
   );
-  return rows.map(row => row.table_schema);
+  return rows.map((row) => row.table_schema);
 }
 
 module.exports = {
@@ -157,5 +209,5 @@ module.exports = {
   createClinicDatabase,
   executeMasterQuery,
   executeClinicQuery,
-  listClinicDatabases
-}; 
+  listClinicDatabases,
+};

@@ -39,9 +39,29 @@ app.use(express.urlencoded({ extended: true }));
 // Initialize master database
 const initializeMasterDatabase = async () => {
   try {
-    // Read and execute master_schema.sql
-    const masterSchema = fs.readFileSync(
+    // Read master_schema.sql and clinic_schema.sql
+    let masterSchema = fs.readFileSync(
       path.join(__dirname, "config/master_schema.sql"),
+      "utf8"
+    );
+    let clinicSchema = fs.readFileSync(
+      path.join(__dirname, "config/clinic_schema.sql"),
+      "utf8"
+    );
+
+    // Get database names
+    const masterDbName = process.env.DB_NAME || "optometry_master";
+    const prefix = masterDbName.split("_")[0]; // Extract prefix (e.g., 'optoplus' from 'optoplus_master')
+    const clinicDbName = `${prefix}_clinic`;
+
+    // Replace placeholders with actual database names
+    masterSchema = masterSchema.replace(/\${DB_NAME}/g, masterDbName);
+    clinicSchema = clinicSchema.replace(/\${DB_NAME}/g, clinicDbName);
+
+    // Write updated schema files
+    fs.writeFileSync(
+      path.join(__dirname, "config/clinic_schema.sql.tmp"),
+      clinicSchema,
       "utf8"
     );
 
@@ -53,7 +73,15 @@ const initializeMasterDatabase = async () => {
 
     // Execute each statement
     for (const statement of statements) {
-      await executeMasterQuery(statement);
+      try {
+        await executeMasterQuery(statement);
+      } catch (err) {
+        // If the error is not about database already existing, rethrow it
+        if (!err.message.includes("database exists")) {
+          throw err;
+        }
+        console.log(`Note: ${err.message}`);
+      }
     }
 
     // Setup super admin user if needed
@@ -62,7 +90,10 @@ const initializeMasterDatabase = async () => {
     console.log("Master database initialized successfully");
   } catch (error) {
     console.error("Error initializing master database:", error);
-    process.exit(1);
+    // Don't exit the process, try to continue with the application
+    console.log(
+      "Attempting to continue despite database initialization error..."
+    );
   }
 };
 
