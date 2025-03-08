@@ -13,6 +13,7 @@ const createClinic = async (req, res) => {
 
     const clinicData = {
       name: req.body.name,
+      englishName: req.body.englishName,
       address: req.body.address,
       phone: req.body.phone,
       managerName: req.body.managerName,
@@ -23,16 +24,17 @@ const createClinic = async (req, res) => {
     const result = await Clinic.create(clinicData);
 
     res.status(201).json({
-      message: 'مطب با موفقیت ایجاد شد',
+      message: 'کلینیک با موفقیت ایجاد شد',
       clinic: {
         id: result.id,
         name: clinicData.name,
+        englishName: clinicData.englishName,
         dbName: result.dbName
       }
     });
   } catch (error) {
     console.error('Create clinic error:', error);
-    res.status(500).json({ message: 'خطا در ایجاد مطب' });
+    res.status(500).json({ message: 'خطا در ایجاد کلینیک' });
   }
 };
 
@@ -52,7 +54,7 @@ const getAllClinics = async (req, res) => {
     res.json({ clinics });
   } catch (error) {
     console.error('Get all clinics error:', error);
-    res.status(500).json({ message: 'خطا در دریافت اطلاعات مطب‌ها' });
+    res.status(500).json({ message: 'خطا در دریافت اطلاعات کلینیک‌ها' });
   }
 };
 
@@ -64,13 +66,13 @@ const getClinicById = async (req, res) => {
     const clinic = await Clinic.getById(req.params.id);
 
     if (!clinic) {
-      return res.status(404).json({ message: 'مطب یافت نشد' });
+      return res.status(404).json({ message: 'کلینیک یافت نشد' });
     }
 
     res.json({ clinic });
   } catch (error) {
     console.error('Get clinic by ID error:', error);
-    res.status(500).json({ message: 'خطا در دریافت اطلاعات مطب' });
+    res.status(500).json({ message: 'خطا در دریافت اطلاعات کلینیک' });
   }
 };
 
@@ -97,13 +99,13 @@ const updateClinic = async (req, res) => {
     const success = await Clinic.update(req.params.id, clinicData);
 
     if (!success) {
-      return res.status(404).json({ message: 'مطب یافت نشد یا تغییری اعمال نشد' });
+      return res.status(404).json({ message: 'کلینیک یافت نشد یا تغییری اعمال نشد' });
     }
 
-    res.json({ message: 'مطب با موفقیت به‌روزرسانی شد' });
+    res.json({ message: 'کلینیک با موفقیت به‌روزرسانی شد' });
   } catch (error) {
     console.error('Update clinic error:', error);
-    res.status(500).json({ message: 'خطا در به‌روزرسانی مطب' });
+    res.status(500).json({ message: 'خطا در به‌روزرسانی کلینیک' });
   }
 };
 
@@ -115,13 +117,13 @@ const deleteClinic = async (req, res) => {
     const success = await Clinic.delete(req.params.id);
 
     if (!success) {
-      return res.status(404).json({ message: 'مطب یافت نشد' });
+      return res.status(404).json({ message: 'کلینیک یافت نشد' });
     }
 
-    res.json({ message: 'مطب با موفقیت حذف شد' });
+    res.json({ message: 'کلینیک با موفقیت حذف شد' });
   } catch (error) {
     console.error('Delete clinic error:', error);
-    res.status(500).json({ message: 'خطا در حذف مطب' });
+    res.status(500).json({ message: 'خطا در حذف کلینیک' });
   }
 };
 

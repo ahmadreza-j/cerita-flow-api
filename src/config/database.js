@@ -98,13 +98,13 @@ async function getClinicConnection(clinicDbName) {
 async function createClinicDatabase(clinicName, clinicDbName) {
   const connection = await getMasterConnection();
   try {
-    // Create the database
+    // Create the database with backticks around the database name for proper escaping
     await connection.query(
-      `CREATE DATABASE IF NOT EXISTS ${clinicDbName} CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci`
+      `CREATE DATABASE IF NOT EXISTS \`${clinicDbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci`
     );
 
-    // Use the new database
-    await connection.query(`USE ${clinicDbName}`);
+    // Use the new database with backticks for safety
+    await connection.query(`USE \`${clinicDbName}\``);
 
     // Get the schema script
     let schemaScript;

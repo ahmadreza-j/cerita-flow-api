@@ -7,8 +7,15 @@ class Clinic {
    * @returns {Promise<number>} Clinic ID
    */
   static async create(clinicData) {
-    // Generate a database name from the clinic name
-    const dbName = this.generateDatabaseName(clinicData.name);
+    // Use the provided englishName for the database name, or generate one if not provided
+    let dbName;
+    if (clinicData.englishName) {
+      // Sanitize the englishName to ensure it's valid for a database name
+      dbName = this.sanitizeDatabaseName(clinicData.englishName);
+    } else {
+      // Fall back to generating a name from the clinic name if englishName is not provided
+      dbName = this.generateDatabaseName(clinicData.name);
+    }
     
     // Insert clinic record in master database
     const [result] = await executeMasterQuery(
@@ -39,6 +46,30 @@ class Clinic {
     await createClinicDatabase(clinicData.name, dbName);
     
     return { id: clinicId, dbName };
+  }
+  
+  /**
+   * Sanitize a string to be used as a database name
+   * @param {string} name - The name to sanitize
+   * @returns {string} Sanitized database name
+   */
+  static sanitizeDatabaseName(name) {
+    // Convert to lowercase
+    let sanitized = name.toLowerCase();
+    
+    // Replace hyphens with underscores (important for MySQL compatibility)
+    sanitized = sanitized.replace(/-/g, '_');
+    
+    // Then replace any remaining non-allowed characters
+    sanitized = sanitized.replace(/[^a-z0-9_]/g, '_');
+    
+    // Make sure it doesn't start with a number (MySQL restriction)
+    if (/^[0-9]/.test(sanitized)) {
+      sanitized = 'db_' + sanitized;
+    }
+    
+    // Add prefix
+    return `optometry_${sanitized}`;
   }
   
   /**
