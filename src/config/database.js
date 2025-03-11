@@ -1,107 +1,111 @@
-const mysql = require('mysql2/promise');
-require('dotenv').config();
+const mysql = require("mysql2/promise");
+require("dotenv").config();
+const path = require("path");
+const fs = require("fs");
 
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'optometry_clinic',
+// Create a connection pool without specifying a database
+const rootPool = mysql.createPool({
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "",
+  waitForConnections: true,
+  connectionLimit: 5,
+  queueLimit: 0,
+});
+
+// Main connection pool for the ceritaFlow database
+const ceritaPool = mysql.createPool({
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "",
+  database: process.env.DB_NAME || "ceritaFlow",
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  charset: 'utf8mb4',
-  collation: 'utf8mb4_persian_ci'
 });
 
-// Test database connection
-const testConnection = async () => {
-  let connection;
+/**
+ * Initialize the cerita database
+ * @returns {Promise<boolean>} Success status
+ */
+async function initializeCeritaDb() {
   try {
-    connection = await pool.getConnection();
-    console.log('Database connection successful');
+    const dbName = process.env.DB_NAME || "ceritaFlow";
+
+    // Create the database if it doesn't exist
+    await rootPool.query(
+      `CREATE DATABASE IF NOT EXISTS ${dbName} CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci`
+    );
+
+    // Use the database
+    await rootPool.query(`USE ${dbName}`);
+
+    console.log(`Cerita database '${dbName}' initialized successfully`);
     return true;
   } catch (error) {
-    console.error('Error connecting to database:', error);
+    console.error("Error initializing cerita database:", error);
     throw error;
-  } finally {
-    if (connection) connection.release();
   }
-};
+}
 
-// Execute a query with parameters
-const executeQuery = async (sql, params = []) => {
-  let connection;
+/**
+ * Get a connection to the cerita database
+ * @returns {Promise<mysql.Connection>} Database connection
+ */
+async function getCeritaConnection() {
+  return await ceritaPool.getConnection();
+}
+
+/**
+ * Execute a query on the cerita database
+ * @param {string} sql - SQL query
+ * @param {Array} params - Query parameters
+ * @returns {Promise<Array>} Query results
+ */
+async function executeCeritaQuery(sql, params = []) {
   try {
-    connection = await pool.getConnection();
-    const [results] = await connection.execute(sql, params);
-    return results;
+    return await ceritaPool.execute(sql, params);
   } catch (error) {
-    console.error('Error executing query:', error);
-    throw error;
-  } finally {
-    if (connection) connection.release();
-  }
-};
+    // If the error is about unknown database and the query is not a CREATE DATABASE query
+    if (
+      error.code === "ER_BAD_DB_ERROR" &&
+      !sql.toUpperCase().includes("CREATE DATABASE")
+    ) {
+      // Try to create the database first
+      const dbName = process.env.DB_NAME || "ceritaFlow";
+      await rootPool.execute(
+        `CREATE DATABASE IF NOT EXISTS ${dbName} CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci`
+      );
 
-// Execute a transaction
-const executeTransaction = async (queries) => {
-  let connection;
-  try {
-    connection = await pool.getConnection();
-    await connection.beginTransaction();
+      // Create a new connection pool with the correct database
+      const tempPool = mysql.createPool({
+        host: process.env.DB_HOST || "localhost",
+        user: process.env.DB_USER || "root",
+        password: process.env.DB_PASSWORD || "",
+        database: dbName,
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0,
+      });
 
-    const results = [];
-    for (const query of queries) {
-      const [result] = await connection.execute(query.sql, query.params || []);
-      results.push(result);
+      // Try the query again
+      return await tempPool.execute(sql, params);
     }
-
-    await connection.commit();
-    return results;
-  } catch (error) {
-    if (connection) await connection.rollback();
-    console.error('Error executing transaction:', error);
     throw error;
-  } finally {
-    if (connection) connection.release();
   }
-};
+}
 
-// Initialize database tables
-const initializeTables = async () => {
-  let connection;
-  try {
-    connection = await pool.getConnection();
-    
-    // Read and execute schema.sql
-    const fs = require('fs');
-    const path = require('path');
-    const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
-    
-    // Split schema into individual statements
-    const statements = schema
-      .split(';')
-      .filter(statement => statement.trim())
-      .map(statement => statement + ';');
-
-    // Execute each statement
-    for (const statement of statements) {
-      await connection.execute(statement);
-    }
-
-    console.log('Database tables initialized successfully');
-  } catch (error) {
-    console.error('Error initializing database tables:', error);
-    throw error;
-  } finally {
-    if (connection) connection.release();
-  }
-};
+// For backward compatibility, keep these function names but redirect to the new functions
+const getMasterConnection = getCeritaConnection;
+const executeMasterQuery = executeCeritaQuery;
+const initializeMasterDb = initializeCeritaDb;
 
 module.exports = {
-  pool,
-  testConnection,
-  executeQuery,
-  executeTransaction,
-  initializeTables
-}; 
+  getCeritaConnection,
+  executeCeritaQuery,
+  initializeCeritaDb,
+  // For backward compatibility
+  getMasterConnection,
+  executeMasterQuery,
+  initializeMasterDb,
+};

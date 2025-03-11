@@ -1,46 +1,55 @@
 const { User, Roles } = require('../models/user.model');
+const Admin = require('../models/admin.model');
 const jwt = require('jsonwebtoken');
 
+/**
+ * General authentication middleware
+ */
 const auth = async (req, res, next) => {
     try {
-        const token = req.headers.authorization?.split(' ')[1];
+        // Get token from header
+        const token = req.header('Authorization')?.replace('Bearer ', '');
+        
         if (!token) {
-            return res.status(401).json({ error: 'توکن احراز هویت یافت نشد' });
+            return res.status(401).json({ error: 'دسترسی غیرمجاز: توکن ارائه نشده است' });
         }
-
+        
+        // Verify token
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         
-        // بررسی وجود کاربر در دیتابیس
-        const user = await User.getById(decoded.userId);
-        if (!user) {
-            return res.status(401).json({ error: 'کاربر یافت نشد' });
+        // Check if it's an admin token
+        if (decoded.role === 'ADMIN') {
+            // Check if admin exists
+            const admin = await Admin.getById(decoded.userId);
+            
+            if (!admin || !admin.is_active) {
+                return res.status(401).json({ error: 'دسترسی غیرمجاز: کاربر یافت نشد' });
+            }
+            
+            // Add admin info to request
+            req.user = {
+                userId: admin.id,
+                role: 'ADMIN'
+            };
+        } else {
+            // It's a regular user token
+            const user = await User.getById(decoded.userId);
+            
+            if (!user || !user.is_active) {
+                return res.status(401).json({ error: 'دسترسی غیرمجاز: کاربر یافت نشد' });
+            }
+            
+            // Add user info to request
+            req.user = {
+                userId: user.id,
+                role: user.role
+            };
         }
-
-        // بررسی فعال بودن کاربر
-        if (!user.is_active) {
-            return res.status(403).json({ error: 'حساب کاربری غیرفعال است' });
-        }
-
-        req.user = {
-            userId: user.id,
-            username: user.username,
-            firstName: user.first_name,
-            lastName: user.last_name,
-            role: user.role,
-            clinicId: user.clinic_id,
-            isActive: user.is_active
-        };
-
+        
         next();
     } catch (error) {
-        console.error('Auth middleware error:', error);
-        if (error.name === 'JsonWebTokenError') {
-            return res.status(401).json({ error: 'توکن نامعتبر است' });
-        }
-        if (error.name === 'TokenExpiredError') {
-            return res.status(401).json({ error: 'توکن منقضی شده است' });
-        }
-        res.status(500).json({ error: 'خطا در احراز هویت' });
+        console.error('Auth error:', error);
+        res.status(401).json({ error: 'دسترسی غیرمجاز: توکن نامعتبر است' });
     }
 };
 
@@ -50,10 +59,18 @@ const checkRole = (roles) => {
             return res.status(401).json({ error: 'لطفا ابتدا وارد شوید' });
         }
 
-        if (!roles.includes(req.user.role)) {
+        // Admin has access to everything
+        if (req.user.role === 'ADMIN') {
+            return next();
+        }
+
+        // Convert roles to array if it's a single role
+        const allowedRoles = Array.isArray(roles) ? roles : [roles];
+        
+        if (!allowedRoles.includes(req.user.role)) {
             return res.status(403).json({ 
                 error: 'شما دسترسی به این بخش را ندارید',
-                requiredRoles: roles,
+                requiredRoles: allowedRoles,
                 currentRole: req.user.role
             });
         }
@@ -62,23 +79,7 @@ const checkRole = (roles) => {
     };
 };
 
-const checkClinic = (req, res, next) => {
-    if (!req.user.clinicId && req.user.role !== Roles.ADMIN) {
-        return res.status(403).json({ error: 'شما به هیچ مطبی متصل نیستید' });
-    }
-
-    // اگر ادمین باشد، محدودیت مطب ندارد
-    if (req.user.role === Roles.ADMIN) {
-        return next();
-    }
-
-    // بررسی تطابق مطب درخواستی با مطب کاربر
-    const requestedClinicId = parseInt(req.params.clinicId || req.body.clinicId);
-    if (requestedClinicId && requestedClinicId !== req.user.clinicId) {
-        return res.status(403).json({ error: 'شما به این مطب دسترسی ندارید' });
-    }
-
-    next();
-};
-
-module.exports = { auth, checkRole, checkClinic }; 
+module.exports = {
+    auth,
+    checkRole
+}; 

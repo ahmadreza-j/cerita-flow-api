@@ -1,4 +1,4 @@
-const db = require('../config/database');
+const { executeCeritaQuery } = require('../config/database');
 const bcrypt = require('bcryptjs');
 
 const Roles = {
@@ -12,7 +12,7 @@ const Roles = {
 class User {
     static async create(userData) {
         const hashedPassword = await bcrypt.hash(userData.password, 10);
-        const [result] = await db.execute(
+        const [result] = await executeCeritaQuery(
             `INSERT INTO users (
                 username,
                 email,
@@ -21,9 +21,13 @@ class User {
                 first_name,
                 last_name,
                 phone_number,
-                clinic_id,
+                national_id,
+                age,
+                gender,
+                address,
+                medical_license_number,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
             [
                 userData.username,
                 userData.email,
@@ -32,7 +36,11 @@ class User {
                 userData.firstName,
                 userData.lastName,
                 userData.phoneNumber,
-                userData.clinicId
+                userData.nationalId,
+                userData.age,
+                userData.gender,
+                userData.address,
+                userData.medicalLicenseNumber
             ]
         );
         return result.insertId;
@@ -58,13 +66,33 @@ class User {
             updateFields.push('phone_number = ?');
             values.push(userData.phoneNumber);
         }
+        if (userData.nationalId) {
+            updateFields.push('national_id = ?');
+            values.push(userData.nationalId);
+        }
+        if (userData.age) {
+            updateFields.push('age = ?');
+            values.push(userData.age);
+        }
+        if (userData.gender) {
+            updateFields.push('gender = ?');
+            values.push(userData.gender);
+        }
+        if (userData.address) {
+            updateFields.push('address = ?');
+            values.push(userData.address);
+        }
+        if (userData.medicalLicenseNumber) {
+            updateFields.push('medical_license_number = ?');
+            values.push(userData.medicalLicenseNumber);
+        }
         if (userData.role) {
             updateFields.push('role = ?');
             values.push(userData.role);
         }
-        if (userData.clinicId) {
-            updateFields.push('clinic_id = ?');
-            values.push(userData.clinicId);
+        if (userData.isActive !== undefined) {
+            updateFields.push('is_active = ?');
+            values.push(userData.isActive);
         }
         if (userData.password) {
             const hashedPassword = await bcrypt.hash(userData.password, 10);
@@ -76,7 +104,7 @@ class User {
 
         values.push(userId);
         
-        const [result] = await db.execute(
+        const [result] = await executeCeritaQuery(
             `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`,
             values
         );
@@ -84,9 +112,11 @@ class User {
     }
 
     static async getById(id) {
-        const [rows] = await db.execute(
+        const [rows] = await executeCeritaQuery(
             `SELECT id, username, email, role, first_name, last_name, 
-                    phone_number, clinic_id, created_at, updated_at
+                    phone_number, national_id, age, gender, address,
+                    medical_license_number, is_active,
+                    created_at, updated_at
              FROM users 
              WHERE id = ?`,
             [id]
@@ -95,7 +125,7 @@ class User {
     }
 
     static async getByEmail(email) {
-        const [rows] = await db.execute(
+        const [rows] = await executeCeritaQuery(
             'SELECT * FROM users WHERE email = ?',
             [email]
         );
@@ -103,7 +133,7 @@ class User {
     }
 
     static async getByUsername(username) {
-        const [rows] = await db.execute(
+        const [rows] = await executeCeritaQuery(
             'SELECT * FROM users WHERE username = ?',
             [username]
         );
@@ -113,7 +143,9 @@ class User {
     static async getAll(filters = {}) {
         let query = `
             SELECT id, username, email, role, first_name, last_name, 
-                   phone_number, clinic_id, created_at, updated_at
+                   phone_number, national_id, age, gender, address,
+                   medical_license_number, is_active,
+                   created_at, updated_at
             FROM users 
             WHERE 1=1
         `;
@@ -123,9 +155,9 @@ class User {
             query += ' AND role = ?';
             values.push(filters.role);
         }
-        if (filters.clinicId) {
-            query += ' AND clinic_id = ?';
-            values.push(filters.clinicId);
+        if (filters.isActive !== undefined) {
+            query += ' AND is_active = ?';
+            values.push(filters.isActive);
         }
         if (filters.search) {
             query += ` AND (
@@ -133,33 +165,22 @@ class User {
                 email LIKE ? OR 
                 first_name LIKE ? OR 
                 last_name LIKE ? OR 
-                phone_number LIKE ?
+                phone_number LIKE ? OR
+                national_id LIKE ?
             )`;
             const searchTerm = `%${filters.search}%`;
-            values.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+            values.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
         }
 
         query += ' ORDER BY created_at DESC';
 
-        const [rows] = await db.execute(query, values);
-        return rows;
-    }
-
-    static async getClinicStaff(clinicId) {
-        const [rows] = await db.execute(
-            `SELECT id, username, email, role, first_name, last_name, 
-                    phone_number, created_at, updated_at
-             FROM users 
-             WHERE clinic_id = ? AND role != ?
-             ORDER BY role, created_at DESC`,
-            [clinicId, Roles.ADMIN]
-        );
+        const [rows] = await executeCeritaQuery(query, values);
         return rows;
     }
 
     static async delete(id) {
-        const [result] = await db.execute(
-            'DELETE FROM users WHERE id = ?',
+        const [result] = await executeCeritaQuery(
+            'UPDATE users SET is_active = FALSE WHERE id = ?',
             [id]
         );
         return result.affectedRows > 0;
@@ -167,6 +188,43 @@ class User {
 
     static async validatePassword(user, password) {
         return bcrypt.compare(password, user.password);
+    }
+
+    static async getAllWithFilters(filters = {}) {
+        let query = 'SELECT * FROM users WHERE 1=1';
+        const values = [];
+
+        // Filter by role(s)
+        if (filters.role) {
+            query += ' AND role = ?';
+            values.push(filters.role);
+        }
+
+        // Exclude specific roles
+        if (filters.excludeRoles && Array.isArray(filters.excludeRoles) && filters.excludeRoles.length > 0) {
+            const placeholders = filters.excludeRoles.map(() => '?').join(', ');
+            query += ` AND role NOT IN (${placeholders})`;
+            values.push(...filters.excludeRoles);
+        }
+
+        // Filter by active status
+        if (filters.isActive !== undefined) {
+            query += ' AND is_active = ?';
+            values.push(filters.isActive);
+        }
+
+        // Search by name, email, or username
+        if (filters.search) {
+            query += ' AND (username LIKE ? OR email LIKE ? OR first_name LIKE ? OR last_name LIKE ?)';
+            const searchTerm = `%${filters.search}%`;
+            values.push(searchTerm, searchTerm, searchTerm, searchTerm);
+        }
+
+        // Order by created_at
+        query += ' ORDER BY created_at DESC';
+
+        const [rows] = await executeCeritaQuery(query, values);
+        return rows;
     }
 }
 

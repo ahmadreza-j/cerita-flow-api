@@ -30,8 +30,7 @@ const login = async (req, res) => {
         const token = jwt.sign(
             { 
                 userId: user.id, 
-                role: user.role,
-                clinicId: user.clinic_id 
+                role: user.role
             },
             process.env.JWT_SECRET,
             { expiresIn: '24h' }
@@ -45,7 +44,6 @@ const login = async (req, res) => {
                 firstName: user.first_name,
                 lastName: user.last_name,
                 role: user.role,
-                clinicId: user.clinic_id,
                 isActive: user.is_active
             }
         });
@@ -62,7 +60,7 @@ const register = async (req, res) => {
             return res.status(400).json({ errors: errors.array() });
         }
 
-        const { username, email, password, firstName, lastName, role, clinicId } = req.body;
+        const { username, email, password, firstName, lastName, role } = req.body;
 
         // فقط ادمین می‌تواند کاربر با نقش ادمین ایجاد کند
         if (role === Roles.ADMIN && (!req.user || req.user.role !== Roles.ADMIN)) {
@@ -91,7 +89,6 @@ const register = async (req, res) => {
             firstName,
             lastName,
             role,
-            clinicId,
             is_active: true
         });
 
@@ -105,8 +102,7 @@ const register = async (req, res) => {
                 firstName: user.first_name,
                 lastName: user.last_name,
                 email: user.email,
-                role: user.role,
-                clinicId: user.clinic_id
+                role: user.role
             }
         });
     } catch (error) {
@@ -158,7 +154,6 @@ const getUserProfile = async (req, res) => {
             lastName: user.last_name,
             email: user.email,
             role: user.role,
-            clinicId: user.clinic_id,
             isActive: user.is_active
         });
     } catch (error) {
