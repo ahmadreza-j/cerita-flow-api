@@ -32,7 +32,7 @@ router.get('/dashboard', isAdmin, async (req, res) => {
 
     // Get today's visits count
     const today = new Date().toISOString().split('T')[0];
-    const todayVisitsQuery = `SELECT COUNT(*) as todayVisits FROM visits WHERE DATE(appointment_date) = ?`;
+    const todayVisitsQuery = `SELECT COUNT(*) as todayVisits FROM visits WHERE DATE(visit_date) = ?`;
     const [todayVisitsResult] = await executeCeritaQuery(todayVisitsQuery, [today]);
     const todayVisits = todayVisitsResult[0].todayVisits;
 
@@ -71,7 +71,7 @@ router.get('/clinic', auth, async (req, res) => {
              SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completedVisits,
              SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pendingVisits
       FROM visits 
-      WHERE DATE(appointment_date) BETWEEN ? AND ?
+      WHERE DATE(visit_date) BETWEEN ? AND ?
     `;
     const [visitsResult] = await executeCeritaQuery(visitsQuery, [startDate, endDate]);
     

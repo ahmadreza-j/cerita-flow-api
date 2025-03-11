@@ -1,4 +1,4 @@
-const db = require('../config/database');
+const { executeCeritaQuery } = require('../config/database');
 const { generatePersianDate, generatePersianTime } = require('../utils/dateUtils');
 
 class Visit {
@@ -6,20 +6,18 @@ class Visit {
     const persianDate = generatePersianDate();
     const persianTime = generatePersianTime();
     
-    const [result] = await db.execute(
+    const [result] = await executeCeritaQuery(
       `INSERT INTO visits (
         patient_id,
-        clinic_id,
         visit_date,
         visit_time,
         chief_complaint,
         status,
         created_by,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, 'pending', ?, NOW())`,
+      ) VALUES (?, ?, ?, ?, 'pending', ?, NOW())`,
       [
         visitData.patientId,
-        visitData.clinicId,
         persianDate,
         persianTime,
         visitData.chiefComplaint || null,
@@ -32,7 +30,7 @@ class Visit {
   static async updateExamination(visitId, examinationData) {
     const examinationDate = generatePersianDate();
     
-    await db.execute(
+    await executeCeritaQuery(
       `UPDATE visits SET
         doctor_id = ?,
         status = 'completed'
@@ -43,7 +41,7 @@ class Visit {
       ]
     );
     
-    const [result] = await db.execute(
+    const [result] = await executeCeritaQuery(
       `INSERT INTO eye_examinations (
         visit_id,
         right_sphere,
@@ -93,7 +91,7 @@ class Visit {
   }
 
   static async getPatientVisits(patientId) {
-    const [rows] = await db.execute(
+    const [rows] = await executeCeritaQuery(
       `SELECT v.*, 
         u1.first_name as creator_first_name, u1.last_name as creator_last_name,
         u2.first_name as doctor_first_name, u2.last_name as doctor_last_name
@@ -108,7 +106,7 @@ class Visit {
   }
 
   static async getVisitWithExamination(visitId) {
-    const [visitRows] = await db.execute(
+    const [visitRows] = await executeCeritaQuery(
       `SELECT v.*, 
         p.first_name as patient_first_name, p.last_name as patient_last_name, p.file_number,
         u1.first_name as creator_first_name, u1.last_name as creator_last_name,
@@ -125,7 +123,7 @@ class Visit {
     
     const visit = visitRows[0];
     
-    const [examRows] = await db.execute(
+    const [examRows] = await executeCeritaQuery(
       `SELECT e.*, 
         u.first_name as examiner_first_name, u.last_name as examiner_last_name
        FROM eye_examinations e
@@ -156,10 +154,9 @@ class Visit {
        JOIN patients p ON v.patient_id = p.id
        LEFT JOIN users u ON v.created_by = u.id
        WHERE v.status = 'pending'
-       AND v.clinic_id = ?
     `;
     
-    const params = [clinicId];
+    const params = [];
     
     if (date) {
       query += ' AND v.visit_date = ?';
@@ -168,7 +165,7 @@ class Visit {
     
     query += ' ORDER BY v.visit_date ASC, v.visit_time ASC';
     
-    const [rows] = await db.execute(query, params);
+    const [rows] = await executeCeritaQuery(query, params);
     return rows;
   }
   
@@ -178,7 +175,7 @@ class Visit {
   }
   
   static async getVisitsNeedingGlasses(clinicId, limit = 50) {
-    const [rows] = await db.execute(
+    const [rows] = await executeCeritaQuery(
       `SELECT v.*, 
         p.first_name as patient_first_name,
         p.last_name as patient_last_name,
@@ -191,14 +188,13 @@ class Visit {
        FROM visits v
        JOIN patients p ON v.patient_id = p.id
        JOIN eye_examinations e ON v.id = e.visit_id
-       WHERE v.clinic_id = ?
-       AND e.needs_glasses = TRUE
+       WHERE e.needs_glasses = TRUE
        AND NOT EXISTS (
          SELECT 1 FROM sales s WHERE s.visit_id = v.id
        )
        ORDER BY v.visit_date DESC, v.visit_time DESC
        LIMIT ?`,
-      [clinicId, limit]
+      [limit]
     );
     return rows;
   }
@@ -217,7 +213,7 @@ class Visit {
       dateCondition = `v.visit_date >= DATE_SUB(NOW(), INTERVAL 30 DAY)`;
     }
     
-    const [rows] = await db.execute(
+    const [rows] = await executeCeritaQuery(
       `SELECT 
         COUNT(*) as total_visits,
         SUM(CASE WHEN v.status = 'pending' THEN 1 ELSE 0 END) as pending_visits,
@@ -226,12 +222,122 @@ class Visit {
         SUM(CASE WHEN e.needs_referral = TRUE THEN 1 ELSE 0 END) as needs_referral
        FROM visits v
        LEFT JOIN eye_examinations e ON v.id = e.visit_id
-       WHERE v.clinic_id = ?
-       AND ${dateCondition}`,
-      [clinicId]
+       WHERE ${dateCondition}`,
+      []
     );
     
     return rows[0];
+  }
+
+  static async findByClinicAndDateRange(clinicId, startDate, endDate) {
+    // We're ignoring the clinicId parameter since we don't have clinic_id in the visits table
+    // In a real multi-clinic system, you would add: AND v.clinic_id = ?
+    const [rows] = await executeCeritaQuery(
+      `SELECT v.*, 
+        p.first_name as patient_first_name,
+        p.last_name as patient_last_name,
+        p.file_number,
+        p.national_id,
+        u.first_name as doctor_first_name,
+        u.last_name as doctor_last_name
+       FROM visits v
+       JOIN patients p ON v.patient_id = p.id
+       LEFT JOIN users u ON v.doctor_id = u.id
+       WHERE v.visit_date BETWEEN ? AND ?
+       ORDER BY v.visit_date ASC, v.visit_time ASC`,
+      [startDate, endDate]
+    );
+    return rows;
+  }
+
+  static async findById(id) {
+    const [rows] = await executeCeritaQuery(
+      `SELECT v.*, 
+        p.first_name as patient_first_name, p.last_name as patient_last_name, p.file_number,
+        u1.first_name as creator_first_name, u1.last_name as creator_last_name,
+        u2.first_name as doctor_first_name, u2.last_name as doctor_last_name
+       FROM visits v
+       JOIN patients p ON v.patient_id = p.id
+       LEFT JOIN users u1 ON v.created_by = u1.id
+       LEFT JOIN users u2 ON v.doctor_id = u2.id
+       WHERE v.id = ?`,
+      [id]
+    );
+    
+    if (!rows.length) return null;
+    return rows[0];
+  }
+
+  static async findByDoctorAndDate(doctorId, date) {
+    const [rows] = await executeCeritaQuery(
+      `SELECT v.*, 
+        p.first_name as patient_first_name,
+        p.last_name as patient_last_name,
+        p.file_number,
+        p.national_id
+       FROM visits v
+       JOIN patients p ON v.patient_id = p.id
+       WHERE v.doctor_id = ?
+       AND v.visit_date = ?
+       ORDER BY v.visit_time ASC`,
+      [doctorId, date]
+    );
+    return rows;
+  }
+
+  static async update(id, visitData) {
+    const updateFields = [];
+    const params = [];
+    
+    if (visitData.visitDate) {
+      updateFields.push('visit_date = ?');
+      params.push(visitData.visitDate);
+    }
+    
+    if (visitData.visitTime) {
+      updateFields.push('visit_time = ?');
+      params.push(visitData.visitTime);
+    }
+    
+    if (visitData.chiefComplaint !== undefined) {
+      updateFields.push('chief_complaint = ?');
+      params.push(visitData.chiefComplaint);
+    }
+    
+    if (visitData.diagnosis !== undefined) {
+      updateFields.push('diagnosis = ?');
+      params.push(visitData.diagnosis);
+    }
+    
+    if (visitData.recommendations !== undefined) {
+      updateFields.push('recommendations = ?');
+      params.push(visitData.recommendations);
+    }
+    
+    if (visitData.status) {
+      updateFields.push('status = ?');
+      params.push(visitData.status);
+    }
+    
+    if (!updateFields.length) return true;
+    
+    params.push(id);
+    
+    const [result] = await executeCeritaQuery(
+      `UPDATE visits SET ${updateFields.join(', ')} WHERE id = ?`,
+      params
+    );
+    
+    return result.affectedRows > 0;
+  }
+
+  static async delete(id) {
+    const [result] = await executeCeritaQuery(
+      `DELETE FROM visits WHERE id = ?`,
+      [id]
+    );
+    
+    return result.affectedRows > 0;
   }
 }
 

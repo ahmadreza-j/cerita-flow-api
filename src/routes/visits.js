@@ -129,9 +129,8 @@ router.delete('/:id', [
             return res.status(403).json({ error: 'شما اجازه حذف این ویزیت را ندارید' });
         }
 
-        if (req.user.role === 'SECRETARY' && visit.clinic_id !== req.user.clinicId) {
-            return res.status(403).json({ error: 'شما اجازه حذف این ویزیت را ندارید' });
-        }
+        // Since we don't have clinic_id in the visits table, we'll allow any secretary to delete any visit
+        // In a real multi-clinic system, you would check: if (req.user.role === 'SECRETARY' && visit.clinic_id !== req.user.clinicId)
 
         const success = await Visit.delete(req.params.id);
         if (!success) {
@@ -170,12 +169,17 @@ router.get('/doctor/today', [
 // Get clinic's visits for a date range
 router.get('/clinic', [
     auth,
-    checkRole(['CLINIC_MANAGER', 'SECRETARY'])
+    checkRole(['ADMIN', 'SECRETARY'])
 ], async (req, res) => {
     try {
         const { startDate, endDate } = req.query;
+        
+        // For admin users, we don't need to filter by clinicId
+        // For secretary users, we use their clinicId
+        const clinicId = req.user.role === 'ADMIN' ? null : req.user.clinicId;
+        
         const visits = await Visit.findByClinicAndDateRange(
-            req.user.clinicId,
+            clinicId,
             startDate || moment().format('YYYY-MM-DD'),
             endDate || moment().format('YYYY-MM-DD')
         );
