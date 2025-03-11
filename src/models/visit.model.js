@@ -141,7 +141,7 @@ class Visit {
     return visit;
   }
 
-  static async getPendingVisits(clinicId, date = null) {
+  static async getPendingVisits(date = null) {
     let query = `
       SELECT v.*, 
         p.first_name as patient_first_name,
@@ -169,12 +169,12 @@ class Visit {
     return rows;
   }
   
-  static async getTodayVisits(clinicId) {
+  static async getTodayVisits() {
     const today = generatePersianDate();
-    return this.getPendingVisits(clinicId, today);
+    return this.getPendingVisits(today);
   }
   
-  static async getVisitsNeedingGlasses(clinicId, limit = 50) {
+  static async getVisitsNeedingGlasses(limit = 50) {
     const [rows] = await executeCeritaQuery(
       `SELECT v.*, 
         p.first_name as patient_first_name,
@@ -199,7 +199,7 @@ class Visit {
     return rows;
   }
   
-  static async getVisitStats(clinicId, period = 'today') {
+  static async getVisitStats(period = 'today') {
     let dateCondition = '';
     const today = generatePersianDate();
     
@@ -229,9 +229,7 @@ class Visit {
     return rows[0];
   }
 
-  static async findByClinicAndDateRange(clinicId, startDate, endDate) {
-    // We're ignoring the clinicId parameter since we don't have clinic_id in the visits table
-    // In a real multi-clinic system, you would add: AND v.clinic_id = ?
+  static async findByClinicAndDateRange(startDate, endDate) {
     const [rows] = await executeCeritaQuery(
       `SELECT v.*, 
         p.first_name as patient_first_name,
@@ -338,6 +336,105 @@ class Visit {
     );
     
     return result.affectedRows > 0;
+  }
+
+  static async getAll(filters = {}) {
+    let query = `
+      SELECT v.*, 
+             p.first_name AS patient_first_name, 
+             p.last_name AS patient_last_name,
+             p.file_number AS patient_file_number,
+             d.first_name AS doctor_first_name, 
+             d.last_name AS doctor_last_name
+      FROM visits v
+      JOIN patients p ON v.patient_id = p.id
+      LEFT JOIN users d ON v.doctor_id = d.id
+      WHERE 1=1
+    `;
+    const values = [];
+
+    if (filters.patientId) {
+      query += ' AND v.patient_id = ?';
+      values.push(filters.patientId);
+    }
+
+    if (filters.doctorId) {
+      query += ' AND v.doctor_id = ?';
+      values.push(filters.doctorId);
+    }
+
+    if (filters.status) {
+      query += ' AND v.status = ?';
+      values.push(filters.status);
+    }
+
+    if (filters.fromDate) {
+      query += ' AND v.visit_date >= ?';
+      values.push(filters.fromDate);
+    }
+
+    if (filters.toDate) {
+      query += ' AND v.visit_date <= ?';
+      values.push(filters.toDate);
+    }
+
+    if (filters.search) {
+      query += ` AND (
+        p.first_name LIKE ? OR 
+        p.last_name LIKE ? OR 
+        p.file_number LIKE ? OR
+        p.national_id LIKE ? OR
+        p.phone LIKE ?
+      )`;
+      const searchTerm = `%${filters.search}%`;
+      values.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+    }
+
+    query += ' ORDER BY v.visit_date DESC, v.visit_time DESC';
+
+    const [rows] = await executeCeritaQuery(query, values);
+    return rows;
+  }
+
+  static async getVisitsByDateRange(startDate, endDate, doctorId = null) {
+    let query = `
+      SELECT v.*, 
+             p.first_name AS patient_first_name, 
+             p.last_name AS patient_last_name,
+             p.file_number AS patient_file_number,
+             d.first_name AS doctor_first_name, 
+             d.last_name AS doctor_last_name
+      FROM visits v
+      JOIN patients p ON v.patient_id = p.id
+      LEFT JOIN users d ON v.doctor_id = d.id
+      WHERE v.visit_date BETWEEN ? AND ?
+    `;
+    const values = [startDate, endDate];
+
+    if (doctorId) {
+      query += ' AND v.doctor_id = ?';
+      values.push(doctorId);
+    }
+
+    query += ' ORDER BY v.visit_date, v.visit_time';
+
+    const [rows] = await executeCeritaQuery(query, values);
+    return rows;
+  }
+
+  static async getVisitsByDoctorAndDate(doctorId, date) {
+    const [rows] = await executeCeritaQuery(
+      `SELECT v.*, 
+              p.first_name AS patient_first_name, 
+              p.last_name AS patient_last_name,
+              p.file_number AS patient_file_number
+       FROM visits v
+       JOIN patients p ON v.patient_id = p.id
+       WHERE v.doctor_id = ? AND v.visit_date = ?
+       ORDER BY v.visit_time`,
+      [doctorId, date]
+    );
+    return rows;
   }
 }
 

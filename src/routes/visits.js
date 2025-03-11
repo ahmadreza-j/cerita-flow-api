@@ -44,7 +44,6 @@ router.post('/', [
         const visitData = {
             ...req.body,
             doctorId: req.user.role === 'DOCTOR' ? req.user.id : req.body.doctorId,
-            clinicId: req.user.clinicId,
             status: 'pending'
         };
 
@@ -129,15 +128,18 @@ router.delete('/:id', [
             return res.status(403).json({ error: 'شما اجازه حذف این ویزیت را ندارید' });
         }
 
-        // Since we don't have clinic_id in the visits table, we'll allow any secretary to delete any visit
-        // In a real multi-clinic system, you would check: if (req.user.role === 'SECRETARY' && visit.clinic_id !== req.user.clinicId)
-
-        const success = await Visit.delete(req.params.id);
-        if (!success) {
-            return res.status(404).json({ error: 'ویزیت یافت نشد' });
+        // Check if user has permission to delete this visit
+        if (req.user.role !== 'ADMIN' && req.user.role !== 'SECRETARY') {
+            return res.status(403).json({ message: 'شما مجوز حذف نوبت را ندارید' });
         }
 
-        res.json({ message: 'ویزیت با موفقیت حذف شد' });
+        // Delete the visit
+        const deleted = await Visit.delete(req.params.id);
+        if (!deleted) {
+            return res.status(404).json({ message: 'نوبت مورد نظر یافت نشد' });
+        }
+
+        res.json({ message: 'نوبت با موفقیت حذف شد' });
     } catch (error) {
         console.error('Delete visit error:', error);
         res.status(500).json({ error: 'خطا در حذف ویزیت' });
@@ -174,12 +176,7 @@ router.get('/clinic', [
     try {
         const { startDate, endDate } = req.query;
         
-        // For admin users, we don't need to filter by clinicId
-        // For secretary users, we use their clinicId
-        const clinicId = req.user.role === 'ADMIN' ? null : req.user.clinicId;
-        
         const visits = await Visit.findByClinicAndDateRange(
-            clinicId,
             startDate || moment().format('YYYY-MM-DD'),
             endDate || moment().format('YYYY-MM-DD')
         );

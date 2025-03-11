@@ -45,16 +45,17 @@ router.post(
         );
 
         return res.json({
-          token,
+          message: 'ورود موفقیت‌آمیز',
           user: {
             id: admin.id,
             username: admin.username,
             email: admin.email,
-            role: "ADMIN",
             firstName: admin.first_name,
             lastName: admin.last_name,
-            phoneNumber: admin.phone_number,
+            role: "ADMIN",
+            phoneNumber: admin.phone_number
           },
+          token
         });
       }
       
@@ -84,17 +85,17 @@ router.post(
       );
 
       res.json({
-        token,
+        message: 'ورود موفقیت‌آمیز',
         user: {
           id: user.id,
           username: user.username,
           email: user.email,
-          role: user.role,
           firstName: user.first_name,
           lastName: user.last_name,
-          phoneNumber: user.phone_number,
-          clinicId: user.clinic_id,
+          role: user.role,
+          phoneNumber: user.phone_number
         },
+        token
       });
     } catch (error) {
       console.error("Login error:", error);
@@ -184,8 +185,7 @@ router.get("/me", auth, async (req, res) => {
       role: req.user.role,
       firstName: user.first_name,
       lastName: user.last_name,
-      phoneNumber: user.phone_number,
-      clinicId: user.clinic_id,
+      phoneNumber: user.phone_number
     });
   } catch (error) {
     console.error("Get profile error:", error);

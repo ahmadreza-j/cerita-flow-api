@@ -17,55 +17,29 @@ const createUser = async (req, res) => {
     const requestingUserRole = req.user.role;
     const newUserRole = req.body.role;
     
-    // Handle both super admin and regular admin/clinic manager requests
-    let clinicId = req.clinic ? req.clinic.id : null;
-    let clinicDbName = req.clinicDbName;
-    
-    // If super admin is creating a user for a specific clinic
-    if (req.user.isSuperAdmin) {
-      // Require clinicId for super admin
-      if (!req.body.clinicId) {
-        return res.status(400).json({ message: 'شناسه کلینیک برای ایجاد کاربر الزامی است' });
-      }
-      
-      clinicId = req.body.clinicId;
-      
-      // Get clinic database name for the specified clinicId
-      const result = await executeMasterQuery(
-        'SELECT id, name, db_name FROM clinics WHERE id = ?',
-        [clinicId]
-      );
-      
-      if (result.length === 0) {
-        return res.status(404).json({ message: 'کلینیک مورد نظر یافت نشد' });
-      }
-      
-      clinicDbName = result[0].db_name;
-    } else if (!req.user.isSuperAdmin) {
-      // Only ADMIN and CLINIC_MANAGER can create users
-      if (
-        requestingUserRole !== Roles.ADMIN && 
-        requestingUserRole !== Roles.CLINIC_MANAGER
-      ) {
-        return res.status(403).json({ message: 'شما مجوز ایجاد کاربر جدید را ندارید' });
-      }
+    // Only ADMIN and CLINIC_MANAGER can create users
+    if (
+      requestingUserRole !== Roles.ADMIN && 
+      requestingUserRole !== Roles.CLINIC_MANAGER
+    ) {
+      return res.status(403).json({ message: 'شما مجوز ایجاد کاربر جدید را ندارید' });
+    }
 
-      // CLINIC_MANAGER can't create ADMIN users
-      if (
-        requestingUserRole === Roles.CLINIC_MANAGER && 
-        newUserRole === Roles.ADMIN
-      ) {
-        return res.status(403).json({ message: 'شما مجوز ایجاد کاربر با نقش مدیر را ندارید' });
-      }
+    // CLINIC_MANAGER can't create ADMIN users
+    if (
+      requestingUserRole === Roles.CLINIC_MANAGER && 
+      newUserRole === Roles.ADMIN
+    ) {
+      return res.status(403).json({ message: 'شما مجوز ایجاد کاربر با نقش مدیر را ندارید' });
     }
 
     // Check if username or email already exists
-    const existingUser = await User.getByUsername(req.body.username, clinicDbName);
+    const existingUser = await User.getByUsername(req.body.username);
     if (existingUser) {
       return res.status(400).json({ message: 'این نام کاربری قبلاً استفاده شده است' });
     }
 
-    const existingEmail = await User.getByEmail(req.body.email, clinicDbName);
+    const existingEmail = await User.getByEmail(req.body.email);
     if (existingEmail) {
       return res.status(400).json({ message: 'این ایمیل قبلاً استفاده شده است' });
     }
@@ -83,11 +57,10 @@ const createUser = async (req, res) => {
       gender: req.body.gender || null,
       address: req.body.address || null,
       medicalLicenseNumber: req.body.medicalLicenseNumber || null,
-      role: req.body.role,
-      clinicId: clinicId
+      role: req.body.role
     };
 
-    const userId = await User.create(userData, clinicDbName);
+    const userId = await User.create(userData);
 
     res.status(201).json({
       message: 'کاربر با موفقیت ایجاد شد',
@@ -104,112 +77,22 @@ const createUser = async (req, res) => {
  */
 const getAllUsers = async (req, res) => {
   try {
-    let clinicId = req.clinic ? req.clinic.id : null;
-    let clinicDbName = req.clinicDbName;
-    
-    // If super admin is making the request
-    if (req.user.isSuperAdmin) {
-      // Check if a specific clinic is requested
-      if (req.query.clinicId) {
-        clinicId = req.query.clinicId;
-        
-        // Get clinic database name for the specified clinicId
-        const result = await executeMasterQuery(
-          'SELECT id, name, db_name FROM clinics WHERE id = ?',
-          [clinicId]
-        );
-        
-        if (result.length === 0) {
-          return res.status(404).json({ message: 'کلینیک مورد نظر یافت نشد' });
-        }
-        
-        clinicDbName = result[0].db_name;
-        
-        // Get users for the specified clinic
-        const filters = {
-          role: req.query.role,
-          clinicId: clinicId,
-          isActive: req.query.isActive === 'true' ? true : 
-                    req.query.isActive === 'false' ? false : undefined,
-          search: req.query.search
-        };
+    const filters = {
+      role: req.query.role,
+      isActive: req.query.isActive === 'true' ? true : 
+                req.query.isActive === 'false' ? false : undefined,
+      search: req.query.search
+    };
 
-        const users = await User.getAll(filters, clinicDbName);
+    const users = await User.getAll(filters);
 
-        // Remove sensitive information
-        const sanitizedUsers = users.map(user => {
-          const { password, ...userWithoutPassword } = user;
-          return userWithoutPassword;
-        });
+    // Remove sensitive information
+    const sanitizedUsers = users.map(user => {
+      const { password, ...userWithoutPassword } = user;
+      return userWithoutPassword;
+    });
 
-        return res.json({ users: sanitizedUsers });
-      } else {
-        // If no specific clinic is requested, get all clinics
-        const clinics = await executeMasterQuery(
-          'SELECT id, name, db_name FROM clinics WHERE is_active = 1',
-          []
-        );
-        
-        if (clinics.length === 0) {
-          return res.json({ users: [] });
-        }
-        
-        // Get users from all clinics
-        let allUsers = [];
-        
-        for (const clinic of clinics) {
-          try {
-            const filters = {
-              role: req.query.role,
-              clinicId: clinic.id,
-              isActive: req.query.isActive === 'true' ? true : 
-                        req.query.isActive === 'false' ? false : undefined,
-              search: req.query.search
-            };
-            
-            const users = await User.getAll(filters, clinic.db_name);
-            
-            // Add clinic information to each user
-            const usersWithClinic = users.map(user => {
-              const { password, ...userWithoutPassword } = user;
-              return {
-                ...userWithoutPassword,
-                clinicName: clinic.name
-              };
-            });
-            
-            allUsers = [...allUsers, ...usersWithClinic];
-          } catch (error) {
-            console.error(`Error getting users from clinic ${clinic.id}:`, error);
-            // Continue with next clinic
-          }
-        }
-        
-        return res.json({ users: allUsers });
-      }
-    } else {
-      // Regular admin or clinic manager is making the request
-      // For clinic managers, we need to add filter by role 'clinic-manager'
-      let roleFilter = req.query.role;
-      
-      const filters = {
-        role: roleFilter,
-        clinicId: clinicId,
-        isActive: req.query.isActive === 'true' ? true : 
-                  req.query.isActive === 'false' ? false : undefined,
-        search: req.query.search
-      };
-
-      const users = await User.getAll(filters, clinicDbName);
-
-      // Remove sensitive information
-      const sanitizedUsers = users.map(user => {
-        const { password, ...userWithoutPassword } = user;
-        return userWithoutPassword;
-      });
-
-      return res.json({ users: sanitizedUsers });
-    }
+    return res.json({ users: sanitizedUsers });
   } catch (error) {
     console.error('Get all users error:', error);
     res.status(500).json({ message: 'خطا در دریافت اطلاعات کاربران' });

@@ -3,18 +3,13 @@ const { generatePersianDate } = require('../utils/dateUtils');
 
 class Patient {
   static async create(patientData) {
-    // Generate a unique file number
-    const fileNumber = await this.generateUniqueFileNumber();
-    
-    // Get current Persian date
-    const registrationDate = generatePersianDate();
-    
     const [result] = await db.execute(
       `INSERT INTO patients (
         file_number,
         national_id,
         first_name,
         last_name,
+        birth_date,
         age,
         gender,
         occupation,
@@ -22,15 +17,15 @@ class Patient {
         phone,
         email,
         referral_source,
-        clinic_id,
         registration_date,
         created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
-        fileNumber,
+        patientData.fileNumber,
         patientData.nationalId,
         patientData.firstName,
         patientData.lastName,
+        patientData.birthDate,
         patientData.age,
         patientData.gender,
         patientData.occupation,
@@ -38,11 +33,10 @@ class Patient {
         patientData.phone,
         patientData.email,
         patientData.referralSource,
-        patientData.clinicId,
-        registrationDate
+        patientData.registrationDate
       ]
     );
-    return { id: result.insertId, fileNumber };
+    return result.insertId;
   }
 
   static async generateUniqueFileNumber() {
@@ -85,15 +79,18 @@ class Patient {
     return rows[0];
   }
 
-  static async search(query, clinicId) {
+  static async search(searchTerm) {
     const [rows] = await db.execute(
       `SELECT * FROM patients 
-       WHERE (national_id LIKE ? 
-       OR first_name LIKE ? 
-       OR last_name LIKE ?
-       OR file_number LIKE ?)
-       AND clinic_id = ?`,
-      [`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`, clinicId]
+       WHERE 
+          file_number LIKE ? OR 
+          national_id LIKE ? OR 
+          first_name LIKE ? OR 
+          last_name LIKE ? OR 
+          phone LIKE ?
+       ORDER BY created_at DESC
+       LIMIT 50`,
+      Array(5).fill(`%${searchTerm}%`)
     );
     return rows;
   }
@@ -154,14 +151,28 @@ class Patient {
     return result.affectedRows > 0;
   }
   
-  static async getAll(clinicId, limit = 100) {
-    const [rows] = await db.execute(
-      `SELECT * FROM patients 
-       WHERE clinic_id = ?
-       ORDER BY created_at DESC
-       LIMIT ?`,
-      [clinicId, limit]
-    );
+  static async getAll(filters = {}) {
+    let query = `
+      SELECT * FROM patients 
+      WHERE 1=1
+    `;
+    const values = [];
+
+    if (filters.search) {
+      query += ` AND (
+        file_number LIKE ? OR 
+        national_id LIKE ? OR 
+        first_name LIKE ? OR 
+        last_name LIKE ? OR 
+        phone LIKE ?
+      )`;
+      const searchTerm = `%${filters.search}%`;
+      values.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    const [rows] = await db.execute(query, values);
     return rows;
   }
   

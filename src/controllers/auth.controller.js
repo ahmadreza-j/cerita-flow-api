@@ -103,16 +103,16 @@ const userLogin = async (req, res) => {
     // Generate JWT token
     const token = jwt.sign(
       { 
-        id: user.id,
-        clinicDbName: clinic.db_name,
-        isSuperAdmin: false
-      },
-      process.env.JWT_SECRET,
+        userId: user.id, 
+        role: user.role 
+      }, 
+      process.env.JWT_SECRET, 
       { expiresIn: '24h' }
     );
 
+    // Return user info and token
     res.json({
-      token,
+      message: 'ورود موفقیت‌آمیز',
       user: {
         id: user.id,
         username: user.username,
@@ -120,10 +120,9 @@ const userLogin = async (req, res) => {
         firstName: user.first_name,
         lastName: user.last_name,
         role: user.role,
-        clinicId: user.clinic_id,
-        clinicName: clinic.name,
-        isSuperAdmin: false
-      }
+        phoneNumber: user.phone_number
+      },
+      token
     });
   } catch (error) {
     console.error('User login error:', error);

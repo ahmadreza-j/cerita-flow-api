@@ -26,9 +26,8 @@ class User {
                 gender,
                 address,
                 medical_license_number,
-                clinic_id,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
             [
                 userData.username,
                 userData.email,
@@ -41,8 +40,7 @@ class User {
                 userData.age,
                 userData.gender,
                 userData.address,
-                userData.medicalLicenseNumber,
-                userData.clinicId
+                userData.medicalLicenseNumber
             ]
         );
         return result.insertId;
@@ -92,10 +90,6 @@ class User {
             updateFields.push('role = ?');
             values.push(userData.role);
         }
-        if (userData.clinicId) {
-            updateFields.push('clinic_id = ?');
-            values.push(userData.clinicId);
-        }
         if (userData.isActive !== undefined) {
             updateFields.push('is_active = ?');
             values.push(userData.isActive);
@@ -121,7 +115,7 @@ class User {
         const [rows] = await executeCeritaQuery(
             `SELECT id, username, email, role, first_name, last_name, 
                     phone_number, national_id, age, gender, address,
-                    medical_license_number, clinic_id, is_active,
+                    medical_license_number, is_active,
                     created_at, updated_at
              FROM users 
              WHERE id = ?`,
@@ -150,7 +144,7 @@ class User {
         let query = `
             SELECT id, username, email, role, first_name, last_name, 
                    phone_number, national_id, age, gender, address,
-                   medical_license_number, clinic_id, is_active,
+                   medical_license_number, is_active,
                    created_at, updated_at
             FROM users 
             WHERE 1=1
@@ -160,10 +154,6 @@ class User {
         if (filters.role) {
             query += ' AND role = ?';
             values.push(filters.role);
-        }
-        if (filters.clinicId) {
-            query += ' AND clinic_id = ?';
-            values.push(filters.clinicId);
         }
         if (filters.isActive !== undefined) {
             query += ' AND is_active = ?';
@@ -185,20 +175,6 @@ class User {
         query += ' ORDER BY created_at DESC';
 
         const [rows] = await executeCeritaQuery(query, values);
-        return rows;
-    }
-
-    static async getClinicStaff(clinicId) {
-        const [rows] = await executeCeritaQuery(
-            `SELECT id, username, email, role, first_name, last_name, 
-                    phone_number, national_id, age, gender, address,
-                    medical_license_number, is_active,
-                    created_at, updated_at
-             FROM users 
-             WHERE clinic_id = ? AND role != ?
-             ORDER BY role, created_at DESC`,
-            [clinicId, Roles.ADMIN]
-        );
         return rows;
     }
 
@@ -229,12 +205,6 @@ class User {
             const placeholders = filters.excludeRoles.map(() => '?').join(', ');
             query += ` AND role NOT IN (${placeholders})`;
             values.push(...filters.excludeRoles);
-        }
-
-        // Filter by clinic
-        if (filters.clinicId) {
-            query += ' AND clinic_id = ?';
-            values.push(filters.clinicId);
         }
 
         // Filter by active status
