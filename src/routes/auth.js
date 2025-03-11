@@ -41,7 +41,6 @@ router.post(
         {
           userId: user.id,
           role: user.role,
-          clinicId: user.clinic_id,
         },
         process.env.JWT_SECRET,
         { expiresIn: "24h" }
