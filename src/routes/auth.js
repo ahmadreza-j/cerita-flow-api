@@ -106,6 +106,13 @@ router.post(
 // Register
 router.post(
   "/register",
+  auth,
+  (req, res, next) => {
+    if (req.user.role !== "ADMIN") {
+      return res.status(403).json({ error: "فقط مدیران می‌توانند کاربر جدید ثبت کنند" });
+    }
+    next();
+  },
   [
     body("username").notEmpty().withMessage("نام کاربری الزامی است"),
     body("email").isEmail().withMessage("ایمیل نامعتبر است"),
@@ -259,13 +266,58 @@ router.get("/profile", authController.getProfile);
 // Change password
 router.post(
   "/change-password",
+  auth,
   [
     body("currentPassword").notEmpty().withMessage("رمز عبور فعلی الزامی است"),
     body("newPassword")
       .isLength({ min: 6 })
-      .withMessage("رمز عبور جدید باید حداقل 6 کاراکتر باشد"),
+      .withMessage("رمز عبور جدید باید حداقل ۶ کاراکتر باشد")
+      .not()
+      .equals(body("currentPassword"))
+      .withMessage("رمز عبور جدید نباید با رمز عبور فعلی یکسان باشد"),
   ],
-  authController.changePassword
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const { currentPassword, newPassword } = req.body;
+      
+      let user;
+      let isValidPassword;
+      
+      if (req.user.role === "ADMIN") {
+        user = await Admin.getById(req.user.userId);
+        isValidPassword = await Admin.validatePassword(user, currentPassword);
+      } else {
+        user = await User.getById(req.user.userId);
+        isValidPassword = await User.validatePassword(user, currentPassword);
+      }
+      
+      if (!isValidPassword) {
+        return res.status(401).json({ error: "رمز عبور فعلی نادرست است" });
+      }
+      
+      let success;
+      
+      if (req.user.role === "ADMIN") {
+        success = await Admin.update(req.user.userId, { password: newPassword });
+      } else {
+        success = await User.update(req.user.userId, { password: newPassword });
+      }
+      
+      if (!success) {
+        return res.status(500).json({ error: "خطا در تغییر رمز عبور" });
+      }
+      
+      res.json({ message: "رمز عبور با موفقیت تغییر یافت" });
+    } catch (error) {
+      console.error("Change password error:", error);
+      res.status(500).json({ error: "خطا در تغییر رمز عبور" });
+    }
+  }
 );
 
 module.exports = router;
