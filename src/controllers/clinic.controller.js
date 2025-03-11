@@ -11,6 +11,8 @@ const createClinic = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
+    console.log('Creating new clinic with data:', req.body);
+    
     const clinicData = {
       name: req.body.name,
       englishName: req.body.englishName,
@@ -22,6 +24,7 @@ const createClinic = async (req, res) => {
     };
 
     const result = await Clinic.create(clinicData);
+    console.log('Clinic created successfully:', result);
 
     res.status(201).json({
       message: 'کلینیک با موفقیت ایجاد شد',
@@ -36,12 +39,24 @@ const createClinic = async (req, res) => {
     console.error('Create clinic error:', error);
     
     // Handle specific error types
-    if (error.code === 'ER_DUPLICATE_ENGLISH_NAME') {
-      // Send appropriate error message for duplicate english name
+    if (error.code === 'ER_DUPLICATE_ENGLISH_NAME' || error.code === 'ER_DUPLICATE_DATABASE') {
+      // Send appropriate error message for duplicate english name or database
       return res.status(409).json({ message: error.message });
     }
     
-    res.status(500).json({ message: 'خطا در ایجاد کلینیک' });
+    // Handle MySQL duplicate entry error
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ 
+        message: 'نام کلینیک یا نام دیتابیس تکراری است. لطفاً نام دیگری انتخاب کنید'
+      });
+    }
+    
+    // For all other errors
+    const errorMessage = error.message || 'خطا در ایجاد کلینیک';
+    res.status(500).json({ 
+      message: 'خطا در ایجاد کلینیک', 
+      details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+    });
   }
 };
 

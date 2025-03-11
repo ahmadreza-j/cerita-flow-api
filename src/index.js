@@ -6,8 +6,8 @@ const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
 const fs = require("fs");
 const path = require("path");
-const { executeMasterQuery, initializeMasterDb } = require("./config/database");
-const { setupSuperAdmin } = require("./utils/setupAdmin");
+const { executeCeritaQuery, initializeCeritaDb } = require("./config/database");
+const { setupAdmin } = require("./utils/setupAdmin");
 const { setupDatabaseTables } = require("./utils/setupDatabase");
 
 const app = express();
@@ -37,38 +37,37 @@ if (process.env.NODE_ENV === "development") {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Initialize master database
-const initializeMasterDatabase = async () => {
+// Initialize cerita database
+const initializeCeritaDatabase = async () => {
   try {
-    // First, ensure the master database exists
-    await initializeMasterDb();
+    // First, ensure the cerita database exists
+    await initializeCeritaDb();
     
     // Setup database tables
     await setupDatabaseTables();
     
-    // Setup super admin user if needed
+    // Setup admin user if needed
     try {
-      await setupSuperAdmin();
+      await setupAdmin();
     } catch (error) {
-      console.error("Error setting up super admin:", error);
+      console.error("Error setting up admin:", error);
     }
     
-    console.log("Master database initialization completed successfully");
+    console.log("Cerita database initialization completed successfully");
   } catch (error) {
-    console.error("Error initializing master database:", error);
+    console.error("Error initializing cerita database:", error);
     // Don't exit the process, try to continue with the application
     console.log("Attempting to continue despite database initialization error...");
   }
 };
 
-// Initialize master database on startup
-initializeMasterDatabase().catch((err) => {
-  console.error("Failed to initialize master database:", err);
+// Initialize cerita database on startup
+initializeCeritaDatabase().catch((err) => {
+  console.error("Failed to initialize cerita database:", err);
   process.exit(1);
 });
 
 // Routes
-app.use("/api/super-admin", require("./routes/superAdmin"));
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/admin", require("./routes/admin"));
 app.use("/api/users", require("./routes/users"));
@@ -77,7 +76,6 @@ app.use("/api/visits", require("./routes/visits"));
 app.use("/api/glasses", require("./routes/glasses"));
 app.use("/api/products", require("./routes/products"));
 app.use("/api/sales", require("./routes/sales"));
-app.use("/api/clinics", require("./routes/clinics"));
 
 // 404 handler
 app.use((req, res) => {

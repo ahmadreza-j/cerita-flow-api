@@ -11,10 +11,14 @@ class Clinic {
     // Use the provided englishName for the database name, or generate one if not provided
     let dbName;
     if (clinicData.englishName) {
-      // Check if a clinic with this english name already exists
+      // Convert to standard format
+      const sanitizedName = this.sanitizeDatabaseName(clinicData.englishName).replace('optometry_', '');
+      dbName = `optometry_${sanitizedName}`;
+      
+      // Check if a clinic with this english name already exists - look for exact matches
       const [existingClinics] = await executeMasterQuery(
-        'SELECT * FROM clinics WHERE db_name LIKE ?',
-        [`optometry_${this.sanitizeDatabaseName(clinicData.englishName).replace('optometry_', '')}`]
+        'SELECT * FROM clinics WHERE db_name = ?',
+        [dbName]
       );
 
       if (existingClinics && existingClinics.length > 0) {
@@ -23,43 +27,76 @@ class Clinic {
         error.code = 'ER_DUPLICATE_ENGLISH_NAME';
         throw error;
       }
-
-      // If no duplicates, sanitize the englishName to ensure it's valid for a database name
-      dbName = this.sanitizeDatabaseName(clinicData.englishName);
+      
+      // Additional check for the database itself
+      const [existingDatabases] = await executeMasterQuery(
+        'SHOW DATABASES LIKE ?',
+        [dbName]
+      );
+      
+      if (existingDatabases && existingDatabases.length > 0) {
+        const error = new Error('پایگاه داده با این نام قبلاً ایجاد شده است. لطفاً نام انگلیسی دیگری انتخاب کنید');
+        error.code = 'ER_DUPLICATE_DATABASE';
+        throw error;
+      }
     } else {
       // Fall back to generating a name from the clinic name if englishName is not provided
       dbName = this.generateDatabaseName(clinicData.name);
     }
     
-    // Insert clinic record in master database
-    const [result] = await executeMasterQuery(
-      `INSERT INTO clinics (
-        name,
-        db_name,
-        address,
-        phone,
-        manager_name,
-        establishment_year,
-        logo_url,
-        created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-      [
-        clinicData.name,
-        dbName,
-        clinicData.address || null,
-        clinicData.phone || null,
-        clinicData.managerName || null,
-        clinicData.establishmentYear || null,
-        clinicData.logoUrl || null
-      ]
-    );
+    let clinicId = null;
     
-    const clinicId = result.insertId;
-    
-    // Create a new database for the clinic
-    await createClinicDatabase(clinicData.name, dbName);
-    
-    return { id: clinicId, dbName };
+    try {
+      // Insert clinic record in master database
+      const [result] = await executeMasterQuery(
+        `INSERT INTO clinics (
+          name,
+          db_name,
+          address,
+          phone,
+          manager_name,
+          establishment_year,
+          logo_url,
+          created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [
+          clinicData.name,
+          dbName,
+          clinicData.address || null,
+          clinicData.phone || null,
+          clinicData.managerName || null,
+          clinicData.establishmentYear || null,
+          clinicData.logoUrl || null
+        ]
+      );
+      
+      clinicId = result.insertId;
+      console.log(`Created clinic record with ID ${clinicId} and database name ${dbName}`);
+      
+      // Create a new database for the clinic
+      await createClinicDatabase(clinicData.name, dbName);
+      console.log(`Successfully created database ${dbName} for clinic ${clinicData.name}`);
+      
+      return { id: clinicId, dbName };
+    } catch (error) {
+      console.error(`Error during clinic creation process: ${error.message}`);
+      
+      // If we created a clinic record but failed to create the database,
+      // we need to clean up the clinic record
+      if (clinicId) {
+        try {
+          console.log(`Cleaning up clinic record with ID ${clinicId} due to error`);
+          await executeMasterQuery('DELETE FROM clinics WHERE id = ?', [clinicId]);
+          console.log(`Successfully deleted clinic record with ID ${clinicId}`);
+        } catch (cleanupError) {
+          console.error(`Failed to clean up clinic record: ${cleanupError.message}`);
+          // We still want to throw the original error
+        }
+      }
+      
+      // Re-throw the original error
+      throw error;
+    }
   }
   
   /**
