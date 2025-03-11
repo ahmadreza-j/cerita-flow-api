@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body } = require('express-validator');
 const userController = require('../controllers/user.controller');
-const { authenticate, authorize, requireManagerOrAdmin } = require('../middleware/auth.middleware');
+const { authenticate, authorize, requireAdmin } = require('../middleware/auth.middleware');
 const { Roles } = require('../models/user.model');
 
 // All routes require authentication
@@ -11,8 +11,8 @@ router.use(authenticate);
 // Get current user's profile
 router.get('/me', userController.getUserById);
 
-// Routes below require manager or admin permissions
-router.use(requireManagerOrAdmin);
+// Routes below require admin permissions
+router.use(requireAdmin);
 
 // Create a new user
 router.post(

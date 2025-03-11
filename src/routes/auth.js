@@ -3,6 +3,7 @@ const router = express.Router();
 const jwt = require("jsonwebtoken");
 const { body, validationResult } = require("express-validator");
 const { User, Roles } = require("../models/user.model");
+const Admin = require("../models/admin.model");
 const { auth } = require("../middleware/auth");
 const authController = require("../controllers/auth.controller");
 const { authenticate } = require("../middleware/auth.middleware");
@@ -22,6 +23,42 @@ router.post(
 
     try {
       const { username, password } = req.body;
+      
+      // First check if it's an admin
+      let admin = await Admin.getByUsername(username);
+      
+      if (admin) {
+        const isValidPassword = await Admin.validatePassword(admin, password);
+        if (!isValidPassword) {
+          return res
+            .status(401)
+            .json({ error: "نام کاربری یا رمز عبور نادرست است" });
+        }
+
+        const token = jwt.sign(
+          {
+            userId: admin.id,
+            role: "ADMIN",
+          },
+          process.env.JWT_SECRET,
+          { expiresIn: "24h" }
+        );
+
+        return res.json({
+          token,
+          user: {
+            id: admin.id,
+            username: admin.username,
+            email: admin.email,
+            role: "ADMIN",
+            firstName: admin.first_name,
+            lastName: admin.last_name,
+            phoneNumber: admin.phone_number,
+          },
+        });
+      }
+      
+      // If not admin, check regular users
       const user = await User.getByUsername(username);
 
       if (!user) {
@@ -121,7 +158,14 @@ router.post(
 // Get current user profile
 router.get("/me", auth, async (req, res) => {
   try {
-    const user = await User.getById(req.user.userId);
+    let user;
+    
+    if (req.user.role === "ADMIN") {
+      user = await Admin.getById(req.user.userId);
+    } else {
+      user = await User.getById(req.user.userId);
+    }
+    
     if (!user) {
       return res.status(404).json({ error: "کاربر یافت نشد" });
     }
@@ -130,7 +174,7 @@ router.get("/me", auth, async (req, res) => {
       id: user.id,
       username: user.username,
       email: user.email,
-      role: user.role,
+      role: req.user.role,
       firstName: user.first_name,
       lastName: user.last_name,
       phoneNumber: user.phone_number,
@@ -173,13 +217,27 @@ router.put(
 
     try {
       if (req.body.email) {
-        const existingUser = await User.getByEmail(req.body.email);
+        let existingUser;
+        
+        if (req.user.role === "ADMIN") {
+          existingUser = await Admin.getByEmail(req.body.email);
+        } else {
+          existingUser = await User.getByEmail(req.body.email);
+        }
+        
         if (existingUser && existingUser.id !== req.user.userId) {
           return res.status(400).json({ error: "این ایمیل قبلاً ثبت شده است" });
         }
       }
 
-      const success = await User.update(req.user.userId, req.body);
+      let success;
+      
+      if (req.user.role === "ADMIN") {
+        success = await Admin.update(req.user.userId, req.body);
+      } else {
+        success = await User.update(req.user.userId, req.body);
+      }
+      
       if (!success) {
         return res.status(404).json({ error: "کاربر یافت نشد" });
       }
@@ -190,17 +248,6 @@ router.put(
       res.status(500).json({ error: "خطا در بروزرسانی اطلاعات کاربر" });
     }
   }
-);
-
-// User login for a specific clinic
-router.post(
-  "/login",
-  [
-    body("username").notEmpty().withMessage("نام کاربری الزامی است"),
-    body("password").notEmpty().withMessage("رمز عبور الزامی است"),
-    body("clinicId").notEmpty().withMessage("شناسه مطب الزامی است"),
-  ],
-  authController.userLogin
 );
 
 // Protected routes (require authentication)

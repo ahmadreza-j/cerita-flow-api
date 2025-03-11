@@ -1,4 +1,4 @@
-const { executeClinicQuery } = require('../config/database');
+const { executeCeritaQuery } = require('../config/database');
 const bcrypt = require('bcryptjs');
 
 const Roles = {
@@ -10,10 +10,9 @@ const Roles = {
 };
 
 class User {
-    static async create(userData, clinicDbName) {
+    static async create(userData) {
         const hashedPassword = await bcrypt.hash(userData.password, 10);
-        const [result] = await executeClinicQuery(
-            clinicDbName,
+        const [result] = await executeCeritaQuery(
             `INSERT INTO users (
                 username,
                 email,
@@ -49,7 +48,7 @@ class User {
         return result.insertId;
     }
 
-    static async update(userId, userData, clinicDbName) {
+    static async update(userId, userData) {
         const updateFields = [];
         const values = [];
 
@@ -111,17 +110,15 @@ class User {
 
         values.push(userId);
         
-        const [result] = await executeClinicQuery(
-            clinicDbName,
+        const [result] = await executeCeritaQuery(
             `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`,
             values
         );
         return result.affectedRows > 0;
     }
 
-    static async getById(id, clinicDbName) {
-        const [rows] = await executeClinicQuery(
-            clinicDbName,
+    static async getById(id) {
+        const [rows] = await executeCeritaQuery(
             `SELECT id, username, email, role, first_name, last_name, 
                     phone_number, national_id, age, gender, address,
                     medical_license_number, clinic_id, is_active,
@@ -133,25 +130,23 @@ class User {
         return rows[0];
     }
 
-    static async getByEmail(email, clinicDbName) {
-        const [rows] = await executeClinicQuery(
-            clinicDbName,
+    static async getByEmail(email) {
+        const [rows] = await executeCeritaQuery(
             'SELECT * FROM users WHERE email = ?',
             [email]
         );
         return rows[0];
     }
 
-    static async getByUsername(username, clinicDbName) {
-        const [rows] = await executeClinicQuery(
-            clinicDbName,
+    static async getByUsername(username) {
+        const [rows] = await executeCeritaQuery(
             'SELECT * FROM users WHERE username = ?',
             [username]
         );
         return rows[0];
     }
 
-    static async getAll(filters = {}, clinicDbName) {
+    static async getAll(filters = {}) {
         let query = `
             SELECT id, username, email, role, first_name, last_name, 
                    phone_number, national_id, age, gender, address,
@@ -189,13 +184,12 @@ class User {
 
         query += ' ORDER BY created_at DESC';
 
-        const [rows] = await executeClinicQuery(clinicDbName, query, values);
+        const [rows] = await executeCeritaQuery(query, values);
         return rows;
     }
 
-    static async getClinicStaff(clinicId, clinicDbName) {
-        const [rows] = await executeClinicQuery(
-            clinicDbName,
+    static async getClinicStaff(clinicId) {
+        const [rows] = await executeCeritaQuery(
             `SELECT id, username, email, role, first_name, last_name, 
                     phone_number, national_id, age, gender, address,
                     medical_license_number, is_active,
@@ -208,9 +202,8 @@ class User {
         return rows;
     }
 
-    static async delete(id, clinicDbName) {
-        const [result] = await executeClinicQuery(
-            clinicDbName,
+    static async delete(id) {
+        const [result] = await executeCeritaQuery(
             'UPDATE users SET is_active = FALSE WHERE id = ?',
             [id]
         );
@@ -221,11 +214,7 @@ class User {
         return bcrypt.compare(password, user.password);
     }
 
-    static async getAllWithFilters(filters = {}, clinicDbName) {
-        if (!clinicDbName) {
-            throw new Error('Clinic database name is required');
-        }
-
+    static async getAllWithFilters(filters = {}) {
         let query = 'SELECT * FROM users WHERE 1=1';
         const values = [];
 
@@ -264,7 +253,7 @@ class User {
         // Order by created_at
         query += ' ORDER BY created_at DESC';
 
-        const [rows] = await executeClinicQuery(clinicDbName, query, values);
+        const [rows] = await executeCeritaQuery(query, values);
         return rows;
     }
 }
