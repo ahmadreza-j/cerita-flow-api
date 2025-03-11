@@ -61,10 +61,20 @@ const createUser = async (req, res) => {
     };
 
     const userId = await User.create(userData);
-
+    
+    // Fetch the newly created user to return it in the response
+    const newUser = await User.getById(userId);
+    
     res.status(201).json({
       message: 'کاربر با موفقیت ایجاد شد',
-      userId
+      id: userId,
+      username: newUser.username,
+      email: newUser.email,
+      firstName: newUser.first_name,
+      lastName: newUser.last_name,
+      phoneNumber: newUser.phone_number,
+      role: newUser.role,
+      createdAt: newUser.created_at
     });
   } catch (error) {
     console.error('Create user error:', error);
