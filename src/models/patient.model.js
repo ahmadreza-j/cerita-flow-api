@@ -15,11 +15,10 @@ class Patient {
         occupation,
         address,
         phone,
-        email,
         referral_source,
         registration_date,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         patientData.fileNumber,
         patientData.nationalId,
@@ -31,7 +30,6 @@ class Patient {
         patientData.occupation,
         patientData.address,
         patientData.phone,
-        patientData.email,
         patientData.referralSource,
         patientData.registrationDate
       ]
@@ -130,10 +128,6 @@ class Patient {
     if (patientData.phone) {
       updateFields.push('phone = ?');
       values.push(patientData.phone);
-    }
-    if (patientData.email) {
-      updateFields.push('email = ?');
-      values.push(patientData.email);
     }
     if (patientData.referralSource) {
       updateFields.push('referral_source = ?');
