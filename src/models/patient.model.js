@@ -106,8 +106,9 @@ class Patient {
     }
   }
 
-  static async search(searchTerm) {
+  static async search(searchTerm, limit = 50) {
     try {
+      const searchPattern = `%${searchTerm}%`;
       const [rows] = await executeCeritaQuery(
         `SELECT * FROM patients 
          WHERE 
@@ -117,8 +118,8 @@ class Patient {
             last_name LIKE ? OR 
             phone LIKE ?
          ORDER BY created_at DESC
-         LIMIT 50`,
-        Array(5).fill(`%${searchTerm}%`)
+         LIMIT ?`,
+        [searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, limit]
       );
       return rows;
     } catch (error) {
@@ -207,6 +208,11 @@ class Patient {
       }
 
       query += ' ORDER BY created_at DESC';
+      
+      // اضافه کردن محدودیت تعداد نتایج
+      if (filters.limit) {
+        query += ` LIMIT ${parseInt(filters.limit)}`;
+      }
 
       const [rows] = await executeCeritaQuery(query, values);
       return rows;
@@ -243,6 +249,36 @@ class Patient {
     } catch (error) {
       console.error('Error getting visit history:', error);
       throw error;
+    }
+  }
+
+  static async getRecent(limit = 5, sortBy = 'created_at') {
+    try {
+      // تبدیل limit به عدد صحیح
+      const limitNum = parseInt(limit);
+      
+      // استفاده از کوئری ساده بدون پارامتر LIMIT
+      let query = '';
+      
+      if (sortBy === 'lastVisit') {
+        query = `
+          SELECT p.* 
+          FROM patients p
+          ORDER BY p.created_at DESC
+          LIMIT 10
+        `;
+      } else {
+        query = `SELECT * FROM patients ORDER BY created_at DESC LIMIT 10`;
+      }
+      
+      const [rows] = await executeCeritaQuery(query, []);
+      
+      // محدود کردن نتایج در سمت برنامه
+      return rows.slice(0, limitNum);
+    } catch (error) {
+      console.error('Error getting recent patients:', error);
+      // در صورت خطا، یک آرایه خالی برمی‌گردانیم
+      return [];
     }
   }
 }

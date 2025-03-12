@@ -7,7 +7,8 @@ const {
     getPatientById,
     getPatientByNationalId,
     updatePatient,
-    getPatientVisitHistory
+    getPatientVisitHistory,
+    getRecentPatients
 } = require('../controllers/patientController');
 
 const router = express.Router();
@@ -45,6 +46,9 @@ router.get('/search', [
     query('searchTerm')
         .isLength({ min: 3 }).withMessage('عبارت جستجو باید حداقل 3 کاراکتر باشد')
 ], searchPatients);
+
+// Get recent patients
+router.get('/recent', getRecentPatients);
 
 // Get patient by ID
 router.get('/:id', [

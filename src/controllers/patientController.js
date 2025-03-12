@@ -1,7 +1,9 @@
 const { validationResult } = require('express-validator');
 // Import the Patient model directly from the new file
-const Patient = require('../models/patient');
+const Patient = require('../models/patient.model');
 const moment = require('moment-jalaali');
+const { executeCeritaQuery, getCeritaConnection } = require('../config/database');
+const { ceritaPool } = require('../config/database');
 
 const createPatient = async (req, res) => {
     try {
@@ -32,13 +34,23 @@ const createPatient = async (req, res) => {
 
 const searchPatients = async (req, res) => {
     try {
-        const { searchTerm } = req.query;
-        if (!searchTerm || searchTerm.length < 3) {
+        const { searchTerm, query, limit, sort } = req.query;
+        
+        // If no search term but limit and sort are provided, redirect to recent patients
+        if ((!searchTerm && !query) && (limit || sort)) {
+            return getRecentPatients(req, res);
+        }
+        
+        // Get the actual search term from either searchTerm or query parameter
+        const actualSearchTerm = searchTerm || query;
+        
+        if (!actualSearchTerm || actualSearchTerm.length < 3) {
             return res.status(400).json({ error: 'عبارت جستجو باید حداقل 3 کاراکتر باشد' });
         }
 
-        const patients = await Patient.search(searchTerm);
-        res.json(patients);
+        const limitValue = limit ? parseInt(limit) : 50;
+        const patients = await Patient.search(actualSearchTerm, limitValue);
+        res.json({ patients });
     } catch (error) {
         res.status(500).json({ error: 'خطا در جستجوی بیماران' });
     }
@@ -107,11 +119,25 @@ const getPatientVisitHistory = async (req, res) => {
     }
 };
 
+const getRecentPatients = async (req, res) => {
+    try {
+        // استفاده از یک روش ساده‌تر برای دریافت بیماران اخیر
+        const limit = parseInt(req.query.limit) || 5;
+        const patients = await Patient.getAll({ limit });
+        
+        res.json({ patients });
+    } catch (error) {
+        console.error('Error getting recent patients:', error);
+        res.status(500).json({ error: 'خطا در دریافت اطلاعات بیماران اخیر' });
+    }
+};
+
 module.exports = {
     createPatient,
     searchPatients,
     getPatientById,
     getPatientByNationalId,
     updatePatient,
-    getPatientVisitHistory
+    getPatientVisitHistory,
+    getRecentPatients
 }; 
