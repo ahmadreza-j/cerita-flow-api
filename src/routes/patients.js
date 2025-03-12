@@ -17,7 +17,7 @@ router.use(auth);
 
 // Create patient (secretary and admin only)
 router.post('/', [
-    checkRole(['secretary', 'admin']),
+    checkRole(['SECRETARY', 'ADMIN']),
     body('national_id')
         .notEmpty().withMessage('کد ملی الزامی است')
         .isLength({ min: 10, max: 10 }).withMessage('کد ملی باید 10 رقم باشد')
@@ -32,7 +32,8 @@ router.post('/', [
         .optional()
         .isISO8601().withMessage('فرمت تاریخ تولد نامعتبر است'),
     body('age')
-        .optional()
+        .optional({ nullable: true })
+        .if(value => value !== null && value !== '')
         .isInt({ min: 0, max: 120 }).withMessage('سن باید بین 0 تا 120 باشد'),
     body('phone')
         .optional()
@@ -59,7 +60,7 @@ router.get('/national/:nationalId', [
 
 // Update patient (secretary and admin only)
 router.put('/:id', [
-    checkRole(['secretary', 'admin']),
+    checkRole(['SECRETARY', 'ADMIN']),
     param('id').isInt().withMessage('شناسه بیمار نامعتبر است'),
     body('first_name')
         .optional()
@@ -71,7 +72,8 @@ router.put('/:id', [
         .optional()
         .isISO8601().withMessage('فرمت تاریخ تولد نامعتبر است'),
     body('age')
-        .optional()
+        .optional({ nullable: true })
+        .if(value => value !== null && value !== '')
         .isInt({ min: 0, max: 120 }).withMessage('سن باید بین 0 تا 120 باشد'),
     body('phone')
         .optional()

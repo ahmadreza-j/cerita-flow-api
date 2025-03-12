@@ -1,5 +1,6 @@
 const { validationResult } = require('express-validator');
-const { Patient } = require('../models/patient.model');
+// Import the Patient model directly from the new file
+const Patient = require('../models/patient');
 const moment = require('moment-jalaali');
 
 const createPatient = async (req, res) => {
@@ -15,6 +16,7 @@ const createPatient = async (req, res) => {
             return res.status(400).json({ error: 'بیمار با این کد ملی قبلاً ثبت شده است' });
         }
 
+        console.log('Creating patient with data:', JSON.stringify(req.body));
         const patientId = await Patient.create(req.body);
         const patient = await Patient.findById(patientId);
 
@@ -23,6 +25,7 @@ const createPatient = async (req, res) => {
             patient
         });
     } catch (error) {
+        console.error('Error creating patient:', error);
         res.status(500).json({ error: 'خطا در ایجاد پرونده بیمار' });
     }
 };
