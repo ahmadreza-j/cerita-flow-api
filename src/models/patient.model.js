@@ -109,6 +109,7 @@ class Patient {
   static async search(searchTerm, limit = 50) {
     try {
       const searchPattern = `%${searchTerm}%`;
+      const limitNumber = parseInt(limit);
       const [rows] = await executeCeritaQuery(
         `SELECT * FROM patients 
          WHERE 
@@ -118,8 +119,8 @@ class Patient {
             last_name LIKE ? OR 
             phone LIKE ?
          ORDER BY created_at DESC
-         LIMIT ?`,
-        [searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, limit]
+         LIMIT ${limitNumber}`,
+        [searchPattern, searchPattern, searchPattern, searchPattern, searchPattern]
       );
       return rows;
     } catch (error) {
