@@ -230,6 +230,10 @@ class Visit {
   }
 
   static async findByClinicAndDateRange(startDate, endDate) {
+    console.log('Finding visits by date range:', { startDate, endDate });
+    
+    // تاریخ‌های ورودی به فرمت شمسی هستند (YYYY/MM/DD)
+    // در دیتابیس هم تاریخ‌ها به فرمت شمسی ذخیره می‌شوند
     const [rows] = await executeCeritaQuery(
       `SELECT v.*, 
         p.first_name as patient_first_name,
@@ -241,10 +245,12 @@ class Visit {
        FROM visits v
        JOIN patients p ON v.patient_id = p.id
        LEFT JOIN users u ON v.doctor_id = u.id
-       WHERE v.visit_date BETWEEN ? AND ?
+       WHERE v.visit_date = ?
        ORDER BY v.visit_date ASC, v.visit_time ASC`,
-      [startDate, endDate]
+      [startDate]
     );
+    
+    console.log(`Found ${rows.length} visits for date: ${startDate}`);
     return rows;
   }
 

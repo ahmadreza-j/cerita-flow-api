@@ -176,14 +176,22 @@ router.get('/clinic', [
     try {
         const { startDate, endDate } = req.query;
         
+        console.log('Received date range request:', { startDate, endDate });
+        
+        // استفاده از تاریخ شمسی امروز اگر تاریخ ارسال نشده باشد
+        const defaultDate = moment().format('jYYYY/jMM/jDD');
+        
+        // تاریخ‌های ارسالی به صورت شمسی هستند و نیازی به تبدیل نیست
         const visits = await Visit.findByClinicAndDateRange(
-            startDate || moment().format('YYYY-MM-DD'),
-            endDate || moment().format('YYYY-MM-DD')
+            startDate || defaultDate,
+            endDate || defaultDate
         );
 
+        console.log(`Found ${visits.length} visits for date range:`, { startDate, endDate });
+        
         const formattedVisits = visits.map(visit => ({
             ...visit,
-            visitDate: moment(visit.visit_date).format('jYYYY/jMM/jDD'),
+            visitDate: moment(visit.visit_date, 'YYYY/MM/DD').format('jYYYY/jMM/jDD'),
             visitTime: moment(visit.visit_time, 'HH:mm:ss').format('HH:mm')
         }));
 
