@@ -4,6 +4,8 @@ const Patient = require('../models/patient.model');
 const moment = require('moment-jalaali');
 const { executeCeritaQuery, getCeritaConnection } = require('../config/database');
 const { ceritaPool } = require('../config/database');
+// Import the Visit model for creating appointments
+const Visit = require('../models/visit.model');
 
 const createPatient = async (req, res) => {
     try {
@@ -12,20 +14,87 @@ const createPatient = async (req, res) => {
             return res.status(400).json({ errors: errors.array() });
         }
 
+        console.log('Checking if patient exists with national ID:', req.body.national_id);
         // Check if patient already exists
-        const existingPatient = await Patient.findByNationalId(req.body.national_id);
+        let existingPatient = await Patient.findByNationalId(req.body.national_id);
+        console.log('Result of findByNationalId:', existingPatient ? 'Patient found' : 'Patient not found');
+        
+        let patientId;
+        let patient;
+        let visitId;
+        let visit;
+        let isNewPatient;
+        
+        // Get the user ID from the request if available, or use a default user ID (1)
+        // since the created_by column doesn't allow NULL values
+        const userId = req.user && req.user.id ? req.user.id : 1; // Default to user ID 1 if not available
+        
         if (existingPatient) {
-            return res.status(400).json({ error: 'بیمار با این کد ملی قبلاً ثبت شده است' });
+            // EXISTING PATIENT FLOW
+            console.log('Patient already exists with ID:', existingPatient.id);
+            // Patient already exists, use existing patient ID
+            patientId = existingPatient.id;
+            patient = existingPatient;
+            isNewPatient = false;
+            
+            // Create a new appointment for the existing patient
+            const visitData = {
+                patientId: patientId,
+                chiefComplaint: req.body.chief_complaint || null,
+                createdBy: userId
+            };
+            
+            visitId = await Visit.create(visitData);
+            visit = await Visit.findById(visitId);
+            
+            console.log('Created visit for existing patient:', visitId);
+            
+            return res.status(200).json({
+                message: 'بیمار با این کد ملی قبلاً ثبت شده است. نوبت جدید با موفقیت ایجاد شد',
+                patient,
+                visit: {
+                    ...visit,
+                    visit_date: moment(visit.visit_date).format('jYYYY/jMM/jDD')
+                },
+                isNewPatient
+            });
+        } else {
+            // NEW PATIENT FLOW
+            console.log('Creating new patient with national ID:', req.body.national_id);
+            // Create new patient
+            console.log('Creating patient with data:', JSON.stringify(req.body));
+            patientId = await Patient.create(req.body);
+            console.log('New patient created with ID:', patientId);
+            patient = await Patient.findById(patientId);
+            isNewPatient = true;
+            
+            // Create a new appointment for the new patient
+            const visitData = {
+                patientId: patientId,
+                chiefComplaint: req.body.chief_complaint || null,
+                createdBy: userId
+            };
+            
+            visitId = await Visit.create(visitData);
+            visit = await Visit.findById(visitId);
+            
+            console.log('Created visit for new patient:', visitId);
+            
+            // Construct the response object
+            const responseObj = {
+                message: 'پرونده بیمار با موفقیت ایجاد شد و نوبت جدید ثبت گردید',
+                patient,
+                visit: {
+                    ...visit,
+                    visit_date: moment(visit.visit_date).format('jYYYY/jMM/jDD')
+                },
+                isNewPatient: true  // Explicitly set to true for new patients
+            };
+            
+            console.log('Sending response for new patient with isNewPatient:', responseObj.isNewPatient);
+            
+            return res.status(201).json(responseObj);
         }
-
-        console.log('Creating patient with data:', JSON.stringify(req.body));
-        const patientId = await Patient.create(req.body);
-        const patient = await Patient.findById(patientId);
-
-        res.status(201).json({
-            message: 'پرونده بیمار با موفقیت ایجاد شد',
-            patient
-        });
     } catch (error) {
         console.error('Error creating patient:', error);
         res.status(500).json({ error: 'خطا در ایجاد پرونده بیمار' });

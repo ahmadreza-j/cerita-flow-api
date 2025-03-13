@@ -37,7 +37,8 @@ router.post('/', [
         .if(value => value !== null && value !== '')
         .isInt({ min: 0, max: 120 }).withMessage('سن باید بین 0 تا 120 باشد'),
     body('phone')
-        .optional()
+        .optional({ nullable: true })
+        .if(value => value !== null && value !== '')
         .matches(/^09[0-9]{9}$/).withMessage('شماره موبایل نامعتبر است')
 ], createPatient);
 
@@ -80,7 +81,8 @@ router.put('/:id', [
         .if(value => value !== null && value !== '')
         .isInt({ min: 0, max: 120 }).withMessage('سن باید بین 0 تا 120 باشد'),
     body('phone')
-        .optional()
+        .optional({ nullable: true })
+        .if(value => value !== null && value !== '')
         .matches(/^09[0-9]{9}$/).withMessage('شماره موبایل نامعتبر است')
 ], updatePatient);
 
